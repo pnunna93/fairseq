@@ -751,9 +751,13 @@ class Trainer(object):
             try:
                 with maybe_no_sync():
                     # forward and backward
+                    # print("trainer.py ::", type(self.model))
+                    # raise ValueError(type(self.task))
                     loss, sample_size_i, logging_output = self.task.train_step(
                         sample=sample,
                         model=self.model,
+                        ds_model=None,
+                        # ds_model=self._deepspeed_model,
                         criterion=self.criterion,
                         optimizer=self.optimizer,
                         update_num=self.get_num_updates(),
@@ -870,7 +874,10 @@ class Trainer(object):
             with torch.autograd.profiler.record_function("optimizer"):
                 # take an optimization step
                 self.task.optimizer_step(
-                    self.optimizer, model=self.model, update_num=self.get_num_updates()
+                    self.optimizer,
+                    model=self.model,
+                    # model=self._deepspeed_model,
+                    update_num=self.get_num_updates()
                 )
                 if self.cfg.common.amp and overflow:
                     if self._amp_retries == self.cfg.common.amp_batch_retries:

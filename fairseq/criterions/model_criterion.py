@@ -49,7 +49,7 @@ class ModelCriterion(FairseqCriterion):
     def forward(self, model, sample, reduce=True):
         net_output = model(**sample["net_input"])
 
-        sample_size = net_output["sample_size"]
+        sample_size = net_output[1].get("sample_size", sample["ntokens"])
         scaled_losses = {}
 
         if hasattr(model, "get_losses"):
@@ -82,13 +82,13 @@ class ModelCriterion(FairseqCriterion):
             "_world_size": 1,
         }
 
-        for lk in self.log_keys:
+        for lk in (self.log_keys or []):
             if lk in net_output and net_output[lk] is not None:
                 logging_output[lk] = float(net_output[lk])
 
         if len(scaled_losses) > 1:
             for lk, l in scaled_losses.items():
-                logging_output[f"loss_{lk}"] = l.item()
+                logging_output[f"loss_{lk}"] = l.detach().item()
 
         return loss, sample_size, logging_output
 
