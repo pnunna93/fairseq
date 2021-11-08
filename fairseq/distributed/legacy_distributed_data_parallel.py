@@ -137,8 +137,15 @@ class LegacyDistributedDataParallel(nn.Module):
                     if param.grad is None:
                         param.grad = torch.zeros_like(param)
 
-                    if hasattr(param, 'expert'):
-                        # Skip gradient sync for unshared parameters
+                    # if getattr(param, 'expert', False):
+                    #     # Skip gradient sync for unshared parameters
+                    #     continue
+
+                    if getattr(param, 'expert', False):
+                        if param.grad is None:
+                            param.grad = torch.zeros_like(param)
+                        else:
+                            param.grad.data.div_(self.world_size)
                         continue
 
                     if param.grad.requires_grad:

@@ -756,7 +756,7 @@ class Trainer(object):
                     loss, sample_size_i, logging_output = self.task.train_step(
                         sample=sample,
                         model=self.model,
-                        ds_model=None,
+                        # ds_model=None,
                         # ds_model=self._deepspeed_model,
                         criterion=self.criterion,
                         optimizer=self.optimizer,
