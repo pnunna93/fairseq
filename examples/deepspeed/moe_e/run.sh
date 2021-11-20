@@ -1,20 +1,32 @@
 # Train the model
 
-OUT_DIR="${OUT_DIR:-'./scratch'}"
-DATABIN="${DATABIN?}"
+OUT_DIR="${WORKSPACE:-"."}/train_artifacts"
+DATABIN="${DATABIN:-"${WORKSPACE:-.}/wmt16_en_de/databin"}"
 
 set -x
 
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export MKL_THREADING_LAYER=GNU
 
-# RUN_NAME="${1:-}"
-# RUN_NAME="moe_g4_ep2_e2_k1_enc"
-
-# FAIRSEQ_SRC="/home/muelnokr/data__/a-munael/code/external/fairseq_master"
-# export PYTHONPATH="$FAIRSEQ_SRC:$PYTHONPATH"
 USER_DIR=${USER_DIR:-"./user"}
 FS_TRAIN="$USER_DIR/train.py"
+
+preprocess() {
+    TEXT="${WORKSPACE?}/wmt16_en_de"
+    DATABIN="${WORKSPACE}/wmt16_en_de/databin"
+    mkdir -p "$DATABIN"
+    fairseq-preprocess \
+        --source-lang en --target-lang de \
+        --trainpref "$TEXT/train" \
+        --validpref "$TEXT/valid" \
+        --testpref  "$TEXT/test" \
+        --destdir   "${DATABIN}" \
+        --nwordssrc 32768 --nwordstgt 32768 \
+        --joined-dictionary \
+        --workers 20
+}
+
+[[ ! -s "${DATABIN}/preprocess.log" ]] && preprocess
+
 
 # ARCH='transformer_vaswani_wmt_en_de_big'
 # ARCH='transformer_ds_moe_vaswani_wmt_en_de_big'
@@ -27,7 +39,7 @@ if [[ $ARCH == *ds_moe* ]]; then
     NUM_EXPERTS=${NUM_EXPERTS:-8}
     MOE_MODE=${MOE_MODE:-enc,dec}
     Config=(
-        --task 'translation'
+        --task 'translation_deepspeed'
         --deepspeed_moe "$MOE_MODE"
             --ep-world-size $NUM_GPUS
             --num-experts   $NUM_EXPERTS
@@ -40,7 +52,7 @@ if [[ $ARCH == *ds_moe* ]]; then
     RUN_NAME_default="moe_g${NUM_GPUS}_ep${NUM_GPUS}_ex${NUM_EXPERTS}_k1_${MOE_MODE//,/}"
 else
     Config=(
-        --task translation
+        --task translation_deepspeed
         --criterion label_smoothed_cross_entropy
             --label-smoothing 0.1
     )
@@ -48,16 +60,16 @@ else
 fi
 
 DONT_SAVE="--no-save"
-RUN_NAME=${RUN_NAME:-$RUN_NAME_default}
+RUN_NAME="${RUN_NAME:-$RUN_NAME_default}"
 
 train() {
-    SaveDir="${OUT_DIR}/checkpoints/${ARCH}-${RUN_NAME}"
+    SaveDir="${OUT_DIR?}/checkpoints/${ARCH}-${RUN_NAME}"
     mkdir -p $SaveDir
 
     python $FS_TRAIN \
-        $DATABIN \
+        "${DATABIN?}" \
         --seed 43821 \
-        --user-dir $USER_DIR \
+        --user-dir "${USER_DIR?}" \
         --ddp-backend=legacy_ddp --fp16 \
         --arch $ARCH \
         -s 'de' -t 'en' \
@@ -86,7 +98,7 @@ train() {
             --keep-last-epochs 1 \
             --save-interval-updates 100 \
             --keep-interval-updates 1 \
-            --save-dir ${SaveDir} \
+            --save-dir "${SaveDir}" \
             ${DONT_SAVE} \
             --tensorboard-logdir "$OUT_DIR/tb/${ARCH}-${RUN_NAME}"
 }
