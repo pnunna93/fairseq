@@ -6,7 +6,7 @@ This page includes instructions for an example implementation of an MoE Transfor
 
 ### Datasets
 - WMT14 English-French:  https://www.statmt.org/wmt14/translation-task.html#Download
-- WMT16 English-Deutsch: https://www.statmt.org/wmt16/translation-task.html#download
+- WMT16 English-German: https://www.statmt.org/wmt16/translation-task.html#download
 
 <!-- ###  -->
 
@@ -20,7 +20,7 @@ export WORKSPACE="./workspace"
 ```
 
 The steps are:
-1. Download the raw text data in `.<lang1>`, `.<lang2>` file pairs. This's their original format from WMT.
+1. Download the raw text data in `<lang1>`, `<lang2>` file pairs. This's their original format from WMT.
 2. Extract the corresponding raw text file pairs.
 3. If needed, clean and tokenize the raw texts.
 4. Train a subword vocabulary (BPE) using, for example, [sentencepiece](https://github.com/google/sentencepiece).
@@ -30,7 +30,7 @@ The steps are:
 
 ### 1-5. Prepare the texts
 ```bash
-bash /prepare-wmt16ende.sh
+bash ./prepare-wmt16ende.sh
 ```
 
 ### 6. Preprocess the dataset with a joined dictionary
@@ -51,7 +51,9 @@ fairseq-preprocess \
 
 ### 7. Train a model
 
-Use any recipe for a Transformer model from fairseq and add the following arguments (assigned to the variable `${Config[@]`}):
+> See also: [run.sh](./run.sh)
+
+Use any recipe for a Transformer model from fairseq and add the following arguments (assigned to the variable `${Config[@]}`):
 ```bash
     NUM_GPUS=${NUM_GPUS:-8}
     NUM_EXPERTS=${NUM_EXPERTS:-8}
@@ -71,21 +73,21 @@ Use any recipe for a Transformer model from fairseq and add the following argume
     RUN_NAME="moe_g${NUM_GPUS}_ep${NUM_GPUS}_ex${NUM_EXPERTS}_k1_${MOE_MODE//,/}"
 ```
 
-Details:
-| Argument                  | Values                                                                      | Effect                                                                                                                                                                            |
-|---------------------------|-----------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `--ddp-backend`           | `legacy_ddp`                                                                | This is tested only with legacy_ddp mode                                                                                                                                          |
-| `--task`                  | `translation_deepspeed`                                                     | No changes from the base `translation`, only bugfixes                                                                                                                             |
-| `--deepspeed_moe`         | `enc`, `dec`, `enc,dec`                                                     | Enables MoE layers in `enc`oder, `dec`oder or both                                                                                                                                |
-| `--ep-world-size`         | `$NUM_GPUS`                                                                 | Expert world size must equal # of GPUs for now                                                                                                                                    |
-| `--num-experts`           | Number divisible by `$NUM_GPUS`                                             | Total number of experts in the model.                                                                                                                                             |
-| `--top-k`                 | `1`, `2`                                                                    | Expert selection mode.                                                                                                                                                            |
-| `--criterion`             | `model_and_base`                                                            | The `model_and_base` custom criterion uses any loss returned by the model (e.g. `expert_gate_loss` in this case) plus another specified "base criterion".                         |
-| `--loss-weights`          | String of a json dictionary of `"{crit_name}": "{crit_weight}"`  KV pairs   | The final loss is the weighted sum of the model loss(es) and the base criterion's loss, weighted by the provided value or `1.0` otherwise. `null` ignores the corresponding loss. |
-| `--base-criterion`        | A fairseq criterion's CLI name                                              | The base criterion for the main objective. E.g. `label_smoothed_cross_entropy`.                                                                                                   |
-| `--base-criterion-config` | String of a json dictionary of the arguments of init for the base criterion | -                                                                                                                                                                                 |
+#### ***Config details***
+| Argument                  | Values                                                                       | Effect                                                                                                                                                                            |
+|---------------------------|------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--ddp-backend`           | `legacy_ddp`                                                                 | This is tested only with legacy_ddp mode                                                                                                                                          |
+| `--task`                  | `translation_deepspeed`                                                      | No changes from the base `translation`, only bugfixes                                                                                                                             |
+| `--deepspeed_moe`         | `enc`, `dec`, `enc,dec`                                                      | Enables MoE layers in `enc`oder, `dec`oder or both                                                                                                                                |
+| `--ep-world-size`         | `$NUM_GPUS`                                                                  | Expert world size must equal # of GPUs for now                                                                                                                                    |
+| `--num-experts`           | Number divisible by `$NUM_GPUS`                                              | Total number of experts in the model.                                                                                                                                             |
+| `--top-k`                 | `1`, `2`                                                                     | Expert selection mode.                                                                                                                                                            |
+| `--criterion`             | `model_and_base`                                                             | The `model_and_base` custom criterion uses any loss returned by the model (e.g. `expert_gate_loss` in this case) plus another specified "base criterion".                         |
+| `--loss-weights`          | String of a json dictionary of `"{crit_name}": float(crit_weight)`  KV pairs | The final loss is the weighted sum of the model loss(es) and the base criterion's loss, weighted by the provided value or `1.0` otherwise. `null` ignores the corresponding loss. |
+| `--base-criterion`        | A fairseq criterion's CLI name                                               | The base criterion for the main objective. E.g. `label_smoothed_cross_entropy`.                                                                                                   |
+| `--base-criterion-config` | String of a json dictionary of the arguments of init for the base criterion  | -                                                                                                                                                                                 |
 
-For example:
+#### ***Example train command***
 ```bash
    SaveDir="${OUT_DIR?}/checkpoints/${ARCH}-${RUN_NAME}"
 
