@@ -4,6 +4,15 @@ This page includes instructions for an example implementation of an MoE Transfor
 
 ## Resources
 
+### Requirements
+```bash
+# Install fairseq from this source
+pip install --editable ./
+python setup.py build_ext --inplace
+pip install deepspeed
+
+```
+
 ### Datasets
 - WMT14 English-French:  https://www.statmt.org/wmt14/translation-task.html#Download
 - WMT16 English-German: https://www.statmt.org/wmt16/translation-task.html#download
