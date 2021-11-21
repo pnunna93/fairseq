@@ -1,6 +1,7 @@
 # Train the model
 
-OUT_DIR="${WORKSPACE:-"."}/train_artifacts"
+WORKSPACE="${WORKSPACE:?"Export WORKSPACE env var to specify a directory for outputs."}"
+OUT_DIR="${OUT_DIR:-"${WORKSPACE:-.}/train_artifacts"}"
 DATABIN="${DATABIN:-"${WORKSPACE:-.}/wmt16_en_de/databin"}"
 
 set -x
@@ -11,8 +12,7 @@ USER_DIR=${USER_DIR:-"./user"}
 FS_TRAIN="$USER_DIR/train.py"
 
 preprocess() {
-    TEXT="${WORKSPACE?}/wmt16_en_de"
-    DATABIN="${WORKSPACE}/wmt16_en_de/databin"
+    TEXT="${WORKSPACE}/wmt16_en_de"
     mkdir -p "$DATABIN"
     fairseq-preprocess \
         --source-lang en --target-lang de \
@@ -32,7 +32,7 @@ preprocess() {
 # ARCH='transformer_ds_moe_vaswani_wmt_en_de_big'
 # ARCH='transformer_ds_moe_tiny'
 # ARCH='transformer_tiny'
-ARCH=${ARCH?}
+ARCH=${ARCH:?"Export ARCH env var to specify an architecture name, e.g. 'transformer_ds_moe_tiny'."}
 
 if [[ $ARCH == *ds_moe* ]]; then
     NUM_GPUS=${NUM_GPUS:-8}

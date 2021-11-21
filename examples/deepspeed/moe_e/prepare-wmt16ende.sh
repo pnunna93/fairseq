@@ -22,22 +22,22 @@ REM_NON_PRINT_CHAR="$SCRIPTS/tokenizer/remove-non-printing-char.perl"
 BPE_TOKENS=40000
 
 URLS=(
-    # "https://www.statmt.org/wmt13/training-parallel-europarl-v7.tgz"
-    # "https://www.statmt.org/wmt13/training-parallel-commoncrawl.tgz"
+    "https://www.statmt.org/wmt13/training-parallel-europarl-v7.tgz"
+    "https://www.statmt.org/wmt13/training-parallel-commoncrawl.tgz"
     "http://data.statmt.org/wmt16/translation-task/training-parallel-nc-v11.tgz"
     "http://data.statmt.org/wmt16/translation-task/dev.tgz"
     "http://statmt.org/wmt14/test-full.tgz"
 )
 FILES=(
-    # "training-parallel-europarl-v7.tgz"
-    # "training-parallel-commoncrawl.tgz"
+    "training-parallel-europarl-v7.tgz"
+    "training-parallel-commoncrawl.tgz"
     "training-parallel-nc-v11.tgz"
     "dev.tgz"
     "test-full.tgz"
 )
 CORPORA=(
-    # "training-parallel-europarl-v7/europarl-v7.de-en"
-    # "training-parallel-commoncrawl/commoncrawl.de-en"
+    "training/europarl-v7.de-en"
+    "commoncrawl.de-en"
     "training-parallel-nc-v11/news-commentary-v11.de-en"
 )
 
@@ -45,7 +45,7 @@ popd
 
 OUTDIR="${WORKSPACE}/wmt16_en_de"
 
-if [ ! -d "$SCRIPTS" ]; then
+if [[ ! -d "$SCRIPTS" ]]; then
     echo "Please set SCRIPTS variable correctly to point to Moses scripts."
     exit
 fi

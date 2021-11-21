@@ -53,6 +53,11 @@ fairseq-preprocess \
 
 > See also: [run.sh](./run.sh)
 
+1. The dir at the `$OUT_DIR` env variable will include training artifacts like checkpoints (`/checkpoints`) and tensorboard logs (`/tb`).
+2. Specify an architecture. Architectures based on the vanilla Transformer (`transformer_*`) have been adapted in the user directory as `transformer_ds_moe_*`.
+   1. Example: `transformer_tiny` ==> `transformer_ds_moe_tiny`.
+   2. `export ARCH=transformer_ds_moe_{}` before executing `run.sh`.
+
 Use any recipe for a Transformer model from fairseq and add the following arguments (assigned to the variable `${Config[@]}`):
 ```bash
     NUM_GPUS=${NUM_GPUS:-8}
@@ -89,7 +94,8 @@ Use any recipe for a Transformer model from fairseq and add the following argume
 
 #### ***Example train command***
 ```bash
-   SaveDir="${OUT_DIR?}/checkpoints/${ARCH}-${RUN_NAME}"
+    OUT_DIR="${WORKSPACE:-"."}/train_artifacts"
+    SaveDir="${OUT_DIR?}/checkpoints/${ARCH}-${RUN_NAME}"
 
     # ARCH='transformer_ds_moe_vaswani_wmt_en_de_big'
     ARCH='transformer_ds_moe_tiny'
