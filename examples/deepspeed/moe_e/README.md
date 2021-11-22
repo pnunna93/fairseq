@@ -10,11 +10,11 @@ This page includes instructions for an example implementation of an MoE Transfor
 pip install --editable ./
 python setup.py build_ext --inplace
 pip install deepspeed
-
+pip install sacremoses
 ```
 
 ### Datasets
-- WMT14 English-French:  https://www.statmt.org/wmt14/translation-task.html#Download
+- WMT14 English-French: https://www.statmt.org/wmt14/translation-task.html#Download
 - WMT16 English-German: https://www.statmt.org/wmt16/translation-task.html#download
 
 <!-- ###  -->
