@@ -6,7 +6,7 @@ DATABIN="${DATABIN:-"${WORKSPACE:-.}/wmt16_en_de/databin"}"
 
 set -x
 
-export MKL_THREADING_LAYER=GNU
+export MKL_THREADING_LAYER="${MKL_THREADING_LAYER:-GNU}"
 
 USER_DIR=${USER_DIR:-"./user"}
 FS_TRAIN="$USER_DIR/train.py"
@@ -59,7 +59,7 @@ else
     RUN_NAME_default=baseline
 fi
 
-DONT_SAVE="--no-save"
+DONT_SAVE="${DONT_SAVE:+"--no-save"}"
 RUN_NAME="${RUN_NAME:-$RUN_NAME_default}"
 
 train() {

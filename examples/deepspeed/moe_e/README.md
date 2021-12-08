@@ -37,6 +37,21 @@ The steps are:
 6. Binarize the dataset using `fairseq-preprocess`.
 7. Train using `fairseq-train`, pointing to the user extensions directory `./user` next to this README.
 
+### Expected results
+| Metric                | Dense    | Deepspeed MoE x8 |
+|-----------------------|----------|------------------|
+| Train ntokens/batch   | 9.47E+05 | 1.01E+06         |
+| Train tokens/sec      | 138,447  | 70,964           |
+| Val tokens/sec        | 50,438   | 7,000            |
+| Best valid BLEU       | 36.6     | 36.13            |
+| Steps to Best         | 18,756   | 5,740            |
+| Epochs to Best        | 156      | 51               |
+| Comparable Valid BLEU | 36.12    | 36.13            |
+| Steps to Comparable   | 9,600    | 5,740            |
+| N Experts             | 1        | 8                |
+| seconds/update        | 6.67     | 14.2             |
+
+
 ### 1-5. Prepare the texts
 ```bash
 bash ./prepare-wmt16ende.sh
@@ -59,7 +74,6 @@ fairseq-preprocess \
 ```
 
 ### 7. Train a model
-
 > See also: [run.sh](./run.sh)
 
 1. The dir at the `$OUT_DIR` env variable will include training artifacts like checkpoints (`/checkpoints`) and tensorboard logs (`/tb`).
