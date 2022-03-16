@@ -103,6 +103,7 @@ class TransformerEncoderLayer_MOE(nn.Module):
                     self.fc2,
                 ),
                 num_experts=args.num_experts,
+                ep_size=args.ep_world_size,
                 k=args.top_k,
                 min_capacity=args.min_capacity,
                 noisy_gate_policy=args.noisy_gate_policy,
@@ -174,7 +175,7 @@ class TransformerEncoderLayer_MOE(nn.Module):
 
         max_tensor = torch.tensor([s*b], dtype=torch.int32).to(x.device)
         import deepspeed
-        a2a_group = deepspeed.utils.groups.get_expert_parallel_group()
+        a2a_group = deepspeed.utils.groups._get_expert_parallel_group(f"ep_size_{args.ep_world_size}")
         torch.distributed.barrier(group=a2a_group)
         torch.distributed.all_reduce(max_tensor, torch.distributed.ReduceOp.MAX, group=a2a_group)
 

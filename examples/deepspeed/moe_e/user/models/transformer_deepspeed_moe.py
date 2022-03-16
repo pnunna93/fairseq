@@ -155,13 +155,6 @@ class Transformer_DS_MOE_Model(FairseqEncoderDecoderModel):
         # make sure all arguments are present in older models
         base_architecture(args)
 
-        if args.deepspeed_moe:
-            import deepspeed.utils.groups as groups
-            # from fairseq.pdb import set_trace
-            # set_trace()
-            if not groups.is_initialized():
-                groups.initialize(ep_size=args.ep_world_size)
-
         #region Modules building
         if args.encoder_layers_to_keep:
             args.encoder_layers = len(args.encoder_layers_to_keep.split(","))
