@@ -194,11 +194,6 @@ def main(cfg: FairseqConfig) -> None:
     if init_deepspeed_bool:
         import deepspeed
         os.environ['LOCAL_RANK'] = str(cfg.distributed_training.distributed_rank)
-        if not deepspeed.utils.groups.is_initialized():
-            deepspeed.utils.groups.initialize(
-                # b
-                ep_size=cfg.model.ep_world_size
-            )
     if cfg.common.model_parallel_size == 1:
         if cfg.model.deepspeed_moe:
             from user.trainer import DeepspeedETrainer
