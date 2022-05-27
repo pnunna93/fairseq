@@ -379,12 +379,13 @@ class Translation_DS_Task(FairseqTask):
 
             gen_args = json.loads(self.cfg.eval_bleu_args)
             self.sequence_generator = self.build_generator(
-                [model], Namespace(**gen_args)
+                [model], Namespace(**gen_args), ep_group=f"ep_size_{cfg.ep_world_size}"
             )
         return model
 
     def build_generator(
         self, models, args, seq_gen_cls=None, extra_gen_cls_kwargs=None, prefix_allowed_tokens_fn=None,
+        ep_group=None
     ):
         """
         Build a :class:`~SyncedSequenceGenerator` instance for this
