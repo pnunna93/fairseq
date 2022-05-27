@@ -2,9 +2,10 @@ import math
 from typing import Dict, List, Optional
 
 import torch
-from fairseq.sequence_generator import SequenceGenerator
+from fairseq.sequence_generator import SequenceGenerator, EnsembleModel
 from torch import Tensor
 from fairseq import search
+from fairseq.ngram_repeat_block import NGramRepeatBlock
 
 class SyncedSequenceGenerator(SequenceGenerator):
     def __init__(
