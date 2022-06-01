@@ -106,7 +106,7 @@ class SyncedSequenceGenerator(SequenceGenerator):
         self.lm_weight = lm_weight
         if self.lm_model is not None:
             self.lm_model.eval()
-        
+
         self.ep_group = ep_group
 
     def _generate(
@@ -117,7 +117,7 @@ class SyncedSequenceGenerator(SequenceGenerator):
         bos_token: Optional[int] = None,
     ):
         import deepspeed.utils.groups as groups
-        expert_parallel_group = groups.get_expert_parallel_group(self.ep_group)
+        expert_parallel_group = groups._get_expert_parallel_group(self.ep_group)
         incremental_states = torch.jit.annotate(
             List[Dict[str, Dict[str, Optional[Tensor]]]],
             [

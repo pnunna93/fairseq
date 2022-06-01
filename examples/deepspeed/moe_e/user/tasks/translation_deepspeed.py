@@ -490,6 +490,7 @@ class Translation_DS_Task(FairseqTask):
             match_source_len=getattr(args, "match_source_len", False),
             no_repeat_ngram_size=getattr(args, "no_repeat_ngram_size", 0),
             search_strategy=search_strategy,
+            ep_group=ep_group,
             **extra_gen_cls_kwargs,
         )
 
