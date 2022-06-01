@@ -54,7 +54,7 @@ class SyncedSequenceGenerator(SequenceGenerator):
             match_source_len (bool, optional): outputs should match the source
                 length (default: False)
         """
-        super().__init__()
+        super().__init__(models, tgt_dict)
         if isinstance(models, EnsembleModel):
             self.model = models
         else:
