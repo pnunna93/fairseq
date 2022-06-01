@@ -57,7 +57,7 @@ class TransformerEncoderLayer_MOE(nn.Module):
 
     def __init__(self, args, index=-1):
         super().__init__()
-        self.args = args
+        self.ep_group = f"ep_size_{args.ep_world_size}"
         self.embed_dim = args.encoder_embed_dim
         self.quant_noise = getattr(args, "quant_noise_pq", 0)
         self.quant_noise_block_size = getattr(args, "quant_noise_pq_block_size", 8) or 8
@@ -105,8 +105,10 @@ class TransformerEncoderLayer_MOE(nn.Module):
                 num_experts=args.num_experts,
                 ep_size=args.ep_world_size,
                 k=args.top_k,
-                min_capacity=args.min_capacity,
-                noisy_gate_policy=args.noisy_gate_policy,
+                min_capacity=0, # force set to zero. args.min_capacity,
+                noisy_gate_policy="Jitter", # args.noisy_gate_policy,
+                capacity_factor=1.0,
+                eval_capacity_factor=4.0,
             )
             # raise ValueError(self.experts.expert)
             for p in self.experts.parameters():
@@ -175,7 +177,7 @@ class TransformerEncoderLayer_MOE(nn.Module):
 
         max_tensor = torch.tensor([s*b], dtype=torch.int32).to(x.device)
         import deepspeed
-        a2a_group = deepspeed.utils.groups._get_expert_parallel_group(f"ep_size_{self.args.ep_world_size}")
+        a2a_group = deepspeed.utils.groups._get_expert_parallel_group(self.ep_group)
         torch.distributed.barrier(group=a2a_group)
         torch.distributed.all_reduce(max_tensor, torch.distributed.ReduceOp.MAX, group=a2a_group)
 
@@ -281,6 +283,7 @@ class TransformerDecoderLayer_MOE(nn.Module):
         self, args, no_encoder_attn=False, add_bias_kv=False, add_zero_attn=False, index=-1
     ):
         super().__init__()
+        self.ep_group = f"ep_size_{args.ep_world_size}"
         self.embed_dim = args.decoder_embed_dim
         self.dropout_module = FairseqDropout(
             args.dropout, module_name=self.__class__.__name__
@@ -348,8 +351,10 @@ class TransformerDecoderLayer_MOE(nn.Module):
                 num_experts=args.num_experts,
                 ep_size=args.ep_world_size,
                 k=args.top_k,
-                min_capacity=args.min_capacity,
-                noisy_gate_policy=args.noisy_gate_policy,
+                min_capacity=0, # force set to zero. args.min_capacity,
+                noisy_gate_policy="Jitter", # args.noisy_gate_policy,
+                capacity_factor=1.0,
+                eval_capacity_factor=4.0,
             )
             # raise ValueError(self.experts.expert)
             for p in self.experts.parameters():
@@ -413,7 +418,7 @@ class TransformerDecoderLayer_MOE(nn.Module):
     def residual_connection(self, x, residual):
         return residual + x
 
-    def forward_experts(self, x: torch.Tensor, encoder_padding_mask: torch.Tensor):
+    def forward_experts(self, x: torch.Tensor, self_attn_padding_mask=None):
         experts_gate_loss = None
         # flatten and pad up to max
         s, b, d_model = x.shape
@@ -422,13 +427,16 @@ class TransformerDecoderLayer_MOE(nn.Module):
 
         max_tensor = torch.tensor([s*b], dtype=torch.int32).to(x.device)
         import deepspeed
-        a2a_group = deepspeed.utils.groups._get_expert_parallel_group(f"ep_size_{self.args.ep_world_size}")
+        a2a_group = deepspeed.utils.groups._get_expert_parallel_group(self.ep_group)
         torch.distributed.barrier(group=a2a_group)
         torch.distributed.all_reduce(max_tensor, torch.distributed.ReduceOp.MAX, group=a2a_group)
 
         pad_len = max_tensor - s*b
         assert pad_len >= 0
-        used_token = encoder_padding_mask.eq(False).transpose(0, 1).reshape(num_tokens)
+        if self_attn_padding_mask is None:
+            used_token = torch.ones(num_tokens, dtype=torch.bool).to(x.device)
+        else:
+            used_token = self_attn_padding_mask.eq(torch.tensor(False)).transpose(0, 1).reshape(num_tokens)
         if pad_len > 0:
             pad_tensor = torch.zeros(pad_len, 1, d_model, dtype=x.dtype).to(reshaped_x.device)
             reshaped_x = torch.cat((reshaped_x, pad_tensor), 0)
