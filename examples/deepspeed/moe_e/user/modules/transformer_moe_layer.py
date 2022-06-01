@@ -278,7 +278,7 @@ class TransformerDecoderLayer_MOE(nn.Module):
     """
 
     def __init__(
-        self, args, no_encoder_attn=False, add_bias_kv=False, add_zero_attn=False
+        self, args, no_encoder_attn=False, add_bias_kv=False, add_zero_attn=False, index=-1
     ):
         super().__init__()
         self.embed_dim = args.decoder_embed_dim
@@ -321,18 +321,54 @@ class TransformerDecoderLayer_MOE(nn.Module):
             self.encoder_attn = self.build_encoder_attention(self.embed_dim, args)
             self.encoder_attn_layer_norm = LayerNorm(self.embed_dim, export=export)
 
-        self.fc1 = self.build_fc1(
-            self.embed_dim,
-            args.decoder_ffn_embed_dim,
-            self.quant_noise,
-            self.quant_noise_block_size,
-        )
-        self.fc2 = self.build_fc2(
-            args.decoder_ffn_embed_dim,
-            self.embed_dim,
-            self.quant_noise,
-            self.quant_noise_block_size,
-        )
+        self.experts = None
+        if (index + 1) % 2 == 0:
+            from deepspeed.moe.layer import MoE
+            self.expert_counts = torch.zeros(1, args.num_experts, dtype=torch.int64).to('cpu')
+            self.fc1 = self.build_fc1(
+                self.embed_dim,
+                args.encoder_ffn_embed_dim,
+                self.quant_noise,
+                self.quant_noise_block_size,
+            )
+            self.fc2 = self.build_fc2(
+                args.encoder_ffn_embed_dim,
+                self.embed_dim,
+                self.quant_noise,
+                self.quant_noise_block_size,
+            )
+            self.experts = MoE(
+                self.embed_dim,
+                expert=nn.Sequential(
+                    self.fc1,
+                    nn.ReLU(),
+                    self.activation_dropout_module,
+                    self.fc2,
+                ),
+                num_experts=args.num_experts,
+                ep_size=args.ep_world_size,
+                k=args.top_k,
+                min_capacity=args.min_capacity,
+                noisy_gate_policy=args.noisy_gate_policy,
+            )
+            # raise ValueError(self.experts.expert)
+            for p in self.experts.parameters():
+                p.expert = True
+            self.fc1 = None
+            self.fc2 = None
+        else:
+            self.fc1 = self.build_fc1(
+                self.embed_dim,
+                args.decoder_ffn_embed_dim,
+                self.quant_noise,
+                self.quant_noise_block_size,
+            )
+            self.fc2 = self.build_fc2(
+                args.decoder_ffn_embed_dim,
+                self.embed_dim,
+                self.quant_noise,
+                self.quant_noise_block_size,
+            )
 
         self.final_layer_norm = LayerNorm(self.embed_dim, export=export)
         self.need_attn = True
@@ -376,6 +412,38 @@ class TransformerDecoderLayer_MOE(nn.Module):
 
     def residual_connection(self, x, residual):
         return residual + x
+
+    def forward_experts(self, x: torch.Tensor, encoder_padding_mask: torch.Tensor):
+        experts_gate_loss = None
+        # flatten and pad up to max
+        s, b, d_model = x.shape
+        num_tokens = s*b
+        reshaped_x = x.reshape(num_tokens, 1, d_model)
+
+        max_tensor = torch.tensor([s*b], dtype=torch.int32).to(x.device)
+        import deepspeed
+        a2a_group = deepspeed.utils.groups._get_expert_parallel_group(f"ep_size_{self.args.ep_world_size}")
+        torch.distributed.barrier(group=a2a_group)
+        torch.distributed.all_reduce(max_tensor, torch.distributed.ReduceOp.MAX, group=a2a_group)
+
+        pad_len = max_tensor - s*b
+        assert pad_len >= 0
+        used_token = encoder_padding_mask.eq(False).transpose(0, 1).reshape(num_tokens)
+        if pad_len > 0:
+            pad_tensor = torch.zeros(pad_len, 1, d_model, dtype=x.dtype).to(reshaped_x.device)
+            reshaped_x = torch.cat((reshaped_x, pad_tensor), 0)
+            pad_tensor2 = torch.zeros(pad_len, dtype=used_token.dtype).to(used_token.device)
+            used_token = torch.cat((used_token, pad_tensor2), 0)
+        x, experts_gate_loss, exp_counts = self.experts(reshaped_x, used_token)
+        self.expert_counts = torch.add(self.expert_counts, exp_counts)
+        balance_loss_ratio = 1.0
+        experts_gate_loss = experts_gate_loss * balance_loss_ratio
+
+        # remove padding and reshape-back
+        if pad_len > 0:
+            x = torch.split(x, s*b)[0]
+        x = x.reshape(s, b, d_model)
+        return x, experts_gate_loss
 
     def forward(
         self,
@@ -492,9 +560,13 @@ class TransformerDecoderLayer_MOE(nn.Module):
         if self.normalize_before:
             x = self.final_layer_norm(x)
 
-        x = self.activation_fn(self.fc1(x))
-        x = self.activation_dropout_module(x)
-        x = self.fc2(x)
+        experts_gate_loss = None
+        if self.experts is not None:
+            x, experts_gate_loss = self.forward_experts(x, self_attn_padding_mask)
+        else:
+            x = self.activation_fn(self.fc1(x))
+            x = self.activation_dropout_module(x)
+            x = self.fc2(x)
         x = self.dropout_module(x)
         x = self.residual_connection(x, residual)
         if not self.normalize_before:
@@ -511,7 +583,6 @@ class TransformerDecoderLayer_MOE(nn.Module):
             else:
                 self_attn_state = [saved_state["prev_key"], saved_state["prev_value"]]
             return x, attn, self_attn_state
-        experts_gate_loss = None
         return x, attn, None, experts_gate_loss
 
     def make_generation_fast_(self, need_attn: bool = False, **kwargs):

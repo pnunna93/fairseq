@@ -426,8 +426,8 @@ class TransformerDecoder_MOE(FairseqDecoder):
             self.layers = nn.ModuleList([])
         self.layers.extend(
             [
-                self.build_decoder_layer(args, no_encoder_attn)
-                for _ in range(args.decoder_layers)
+                self.build_decoder_layer(args, i, no_encoder_attn)
+                for i in range(args.decoder_layers)
             ]
         )
         self.num_layers = len(self.layers)
@@ -482,8 +482,8 @@ class TransformerDecoder_MOE(FairseqDecoder):
                 BaseLayer(args),
             )
 
-    def build_decoder_layer(self, args, no_encoder_attn=False):
-        layer = TransformerDecoderLayer_MOE(args, no_encoder_attn)
+    def build_decoder_layer(self, args, index, no_encoder_attn=False):
+        layer = TransformerDecoderLayer_MOE(args, no_encoder_attn, index=index)
         checkpoint = getattr(args, "checkpoint_activations", False)
         if checkpoint:
             offload_to_cpu = getattr(args, "offload_activations", False)
