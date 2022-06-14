@@ -31,6 +31,9 @@ from fairseq.dataclass import ChoiceEnum, FairseqDataclass
 from fairseq.tasks import FairseqTask, register_task
 from fairseq.optim.amp_optimizer import AMPOptimizer
 
+from fairseq import search
+from ..synched_sequence_generator import SyncedSequenceGenerator
+
 
 EVAL_BLEU_ORDER = 4
 
@@ -377,9 +380,119 @@ class Translation_DS_Task(FairseqTask):
 
             gen_args = json.loads(self.cfg.eval_bleu_args)
             self.sequence_generator = self.build_generator(
-                [model], Namespace(**gen_args)
+                [model], Namespace(**gen_args), ep_group=f"ep_size_{cfg.ep_world_size}"
             )
         return model
+
+    def build_generator(
+        self, models, args, seq_gen_cls=None, extra_gen_cls_kwargs=None, prefix_allowed_tokens_fn=None,
+        ep_group=None
+    ):
+        """
+        Build a :class:`~SyncedSequenceGenerator` instance for this
+        task.
+
+        Args:
+            models (List[~fairseq.models.FairseqModel]): ensemble of models
+            args (fairseq.dataclass.configs.GenerationConfig):
+                configuration object (dataclass) for generation
+            extra_gen_cls_kwargs (Dict[str, Any]): extra options to pass
+                through to SequenceGenerator
+            prefix_allowed_tokens_fn (Callable[[int, torch.Tensor], List[int]]):
+                If provided, this function constrains the beam search to
+                allowed tokens only at each step. The provided function
+                should take 2 arguments: the batch ID (`batch_id: int`)
+                and a unidimensional tensor of token ids (`inputs_ids:
+                torch.Tensor`). It has to return a `List[int]` with the
+                allowed tokens for the next generation step conditioned
+                on the previously generated tokens (`inputs_ids`) and
+                the batch ID (`batch_id`). This argument is useful for
+                constrained generation conditioned on the prefix, as
+                described in "Autoregressive Entity Retrieval"
+                (https://arxiv.org/abs/2010.00904) and
+                https://github.com/facebookresearch/GENRE.
+        """
+        # only supports beam search at the moment
+        # Choose search strategy. Defaults to Beam Search.
+        sampling = getattr(args, "sampling", False)
+        sampling_topk = getattr(args, "sampling_topk", -1)
+        sampling_topp = getattr(args, "sampling_topp", -1.0)
+        diverse_beam_groups = getattr(args, "diverse_beam_groups", -1)
+        diverse_beam_strength = getattr(args, "diverse_beam_strength", 0.5)
+        match_source_len = getattr(args, "match_source_len", False)
+        diversity_rate = getattr(args, "diversity_rate", -1)
+        constrained = getattr(args, "constraints", False)
+        if prefix_allowed_tokens_fn is None:
+            prefix_allowed_tokens_fn = getattr(args, "prefix_allowed_tokens_fn", None)
+        if (
+            sum(
+                int(cond)
+                for cond in [
+                    sampling,
+                    diverse_beam_groups > 0,
+                    match_source_len,
+                    diversity_rate > 0,
+                ]
+            )
+            > 1
+        ):
+            raise ValueError("Provided Search parameters are mutually exclusive.")
+        assert sampling_topk < 0 or sampling, "--sampling-topk requires --sampling"
+        assert sampling_topp < 0 or sampling, "--sampling-topp requires --sampling"
+
+        if sampling:
+            search_strategy = search.Sampling(
+                self.target_dictionary, sampling_topk, sampling_topp
+            )
+        elif diverse_beam_groups > 0:
+            search_strategy = search.DiverseBeamSearch(
+                self.target_dictionary, diverse_beam_groups, diverse_beam_strength
+            )
+        elif match_source_len:
+            # this is useful for tagging applications where the output
+            # length should match the input length, so we hardcode the
+            # length constraints for simplicity
+            search_strategy = search.LengthConstrainedBeamSearch(
+                self.target_dictionary,
+                min_len_a=1,
+                min_len_b=0,
+                max_len_a=1,
+                max_len_b=0,
+            )
+        elif diversity_rate > -1:
+            search_strategy = search.DiverseSiblingsSearch(
+                self.target_dictionary, diversity_rate
+            )
+        elif constrained:
+            search_strategy = search.LexicallyConstrainedBeamSearch(
+                self.target_dictionary, args.constraints
+            )
+        elif prefix_allowed_tokens_fn:
+            search_strategy = search.PrefixConstrainedBeamSearch(
+                self.target_dictionary, prefix_allowed_tokens_fn
+            )
+        else:
+            search_strategy = search.BeamSearch(self.target_dictionary)
+
+        extra_gen_cls_kwargs = extra_gen_cls_kwargs or {}
+
+        return SyncedSequenceGenerator(
+            models,
+            self.target_dictionary,
+            beam_size=getattr(args, "beam", 5),
+            max_len_a=getattr(args, "max_len_a", 0),
+            max_len_b=getattr(args, "max_len_b", 200),
+            min_len=getattr(args, "min_len", 1),
+            normalize_scores=(not getattr(args, "unnormalized", False)),
+            len_penalty=getattr(args, "lenpen", 1),
+            unk_penalty=getattr(args, "unkpen", 0),
+            temperature=getattr(args, "temperature", 1.0),
+            match_source_len=getattr(args, "match_source_len", False),
+            no_repeat_ngram_size=getattr(args, "no_repeat_ngram_size", 0),
+            search_strategy=search_strategy,
+            ep_group=ep_group,
+            **extra_gen_cls_kwargs,
+        )
 
     def train_step(
         self,

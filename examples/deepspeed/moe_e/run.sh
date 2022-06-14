@@ -84,10 +84,10 @@ train() {
             --lr-scheduler inverse_sqrt \
             --warmup-updates 4000 \
         --max-update 300000 \
-        --max-tokens-valid "${MAX_TOKENS:-8192}" \
         --max-tokens "${MAX_TOKENS:-8192}" \
             --update-freq "${UPDATE_FREQ:-16}" \
         --validate-interval-updates 20 \
+        --batch-size-valid "${BATCH_SIZE_VALID:-16}" \
         --eval-bleu \
             --scoring sacrebleu \
             --eval-bleu-args '{"beam": 5, "max_len_a": 1.2, "max_len_b": 10}' \
