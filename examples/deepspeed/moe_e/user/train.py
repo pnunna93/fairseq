@@ -193,7 +193,7 @@ def main(cfg: FairseqConfig) -> None:
     init_deepspeed_bool = cfg.model.deepspeed_moe and cfg.distributed_training.distributed_rank is not None
     if init_deepspeed_bool:
         import deepspeed
-        os.environ['LOCAL_RANK'] = str(cfg.distributed_training.distributed_rank)
+        os.environ['LOCAL_RANK'] = str(cfg.distributed_training.distributed_rank % cfg.distributed_training.distributed_num_procs)
     if cfg.common.model_parallel_size == 1:
         if cfg.model.deepspeed_moe:
             from user.trainer import DeepspeedETrainer
@@ -255,7 +255,7 @@ def main(cfg: FairseqConfig) -> None:
         ds_args = ObjectView({})
         ds_args.deepspeed = True
         ds_args.deepspeed_config = None
-        ds_args.local_rank = cfg.distributed_training.distributed_rank
+        ds_args.local_rank = cfg.distributed_training.distributed_rank % cfg.distributed_training.distributed_num_procs
         tmp_module, _, _, _ = deepspeed.initialize(args=ds_args,
                                                     model=trainer.model,
                                                     dist_init_required=False,
@@ -519,7 +519,7 @@ def validate_and_save(
             ds_args = ObjectView({})
             ds_args.deepspeed = True
             ds_args.deepspeed_config = None
-            ds_args.local_rank = cfg.distributed_training.distributed_rank
+            ds_args.local_rank = cfg.distributed_training.distributed_rank % cfg.distributed_training.distributed_num_procs
             tmp_module, _, _, _ = deepspeed.initialize(args=ds_args,
                                                         model=trainer.model,
                                                         dist_init_required=False,
