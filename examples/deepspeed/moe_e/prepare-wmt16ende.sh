@@ -13,6 +13,23 @@ echo 'Cloning Moses github repository (for tokenization scripts)...'
 echo 'Installing sentencepiece (for BPE pre-processing)...'
 pip install sentencepiece
 
+setup_spm() {
+    sudo apt-get install cmake build-essential pkg-config libgoogle-perftools-dev
+
+    git clone https://github.com/google/sentencepiece.git 
+    mkdir ./sentencepiece/build
+    pushd ./sentencepiece/build
+    cmake ..
+    make -j $(nproc)
+    sudo make install
+    sudo ldconfig -v
+    popd
+}
+
+if [[ "$SETUP_SPM" == 1 && ! -d ./sentencepiece/build ]]; then
+    setup_spm
+fi
+
 SCRIPTS="${WORKSPACE}/mosesdecoder/scripts"
 TOKENIZER="$SCRIPTS/tokenizer/tokenizer.perl"
 CLEAN="$SCRIPTS/training/clean-corpus-n.perl"

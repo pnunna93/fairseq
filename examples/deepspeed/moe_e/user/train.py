@@ -33,7 +33,7 @@ from fairseq import (
     utils,
 )
 from fairseq.data import iterators, data_utils
-from fairseq.data.plasma_utils import PlasmaStore
+# from fairseq.data.plasma_utils import PlasmaStore
 from fairseq.dataclass.configs import FairseqConfig
 from fairseq.dataclass.utils import convert_namespace_to_omegaconf
 from fairseq.distributed import fsdp_enable_wrap, fsdp_wrap, utils as distributed_utils
@@ -200,36 +200,8 @@ def main(cfg: FairseqConfig) -> None:
             trainer = DeepspeedETrainer(cfg, task, model, criterion, quantizer)
         else:
             trainer = Trainer(cfg, task, model, criterion, quantizer)
-        # if init_deepspeed_bool:
-        #     model, trainer._optimizer._optimizer, __, trainer._lr_scheduler = \
-        #         deepspeed.initialize(
-        #             args=cfg.model,
-        #             model=trainer.model,
-        #             model_parameters=model.parameters(),
-        #             optimizer=trainer.optimizer._optimizer,
-        #             dist_init_required=False,
-        #             config_params=_prepare_deepspeed_config_dict(cfg)
-        #         )
-        #     # DeepSpeedEngine
-        #     trainer._deepspeed_model = model
-        #     print("train.py ::", type(trainer.model))
     else:
         trainer = MegatronTrainer(cfg, task, model, criterion)
-        # print(cfg.model)
-        # raise ValueError
-        # if init_deepspeed_bool:
-        #     import deepspeed
-        #     model, trainer._optimizer._optimizer, __, trainer._lr_scheduler = \
-        #         deepspeed.initialize(
-        #             args=cfg.model,
-        #             model=trainer.model,
-        #             model_parameters=model.parameters(),
-        #             optimizer=trainer.optimizer._optimizer,
-        #             dist_init_required=False,
-        #             config_params=_prepare_deepspeed_config_dict(cfg)
-        #         )
-        #     trainer._deepspeed_model = model
-        #     print("train.py ::", type(trainer.model))
     logger.info(
         "training on {} devices (GPUs/TPUs)".format(
             cfg.distributed_training.distributed_world_size
@@ -259,9 +231,11 @@ def main(cfg: FairseqConfig) -> None:
         tmp_module, _, _, _ = deepspeed.initialize(args=ds_args,
                                                     model=trainer.model,
                                                     dist_init_required=False,
-                                                    config_params={'train_micro_batch_size_per_gpu': 1,
-                                                                    'fp16': {'enabled': cfg.common.fp16},
-                                                                    'amp': {'enabled': True}}) # setting amp to be enabled to avoid unnecessary model parameter broadcasting
+                                                    config_params=_prepare_deepspeed_config_dict(cfg),
+                                                    # config_params={'train_micro_batch_size_per_gpu': 1,
+                                                    #                 'fp16': {'enabled': cfg.common.fp16},
+                                                    #                 'amp': {'enabled': True}}
+                                                ) # setting amp to be enabled to avoid unnecessary model parameter broadcasting
         tmp_module: deepspeed.DeepSpeedEngine
         _load_path, _client_states = tmp_module.load_checkpoint(f"{cfg.checkpoint.save_dir}/deepspeed_moe",
                             tag=None,

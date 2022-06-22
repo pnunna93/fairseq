@@ -57,6 +57,7 @@ class TransformerEncoderLayer_MOE(nn.Module):
 
     def __init__(self, args, index=-1):
         super().__init__()
+        self.args = args
         self.ep_group = f"ep_size_{args.ep_world_size}"
         self.embed_dim = args.encoder_embed_dim
         self.quant_noise = getattr(args, "quant_noise_pq", 0)
@@ -283,6 +284,7 @@ class TransformerDecoderLayer_MOE(nn.Module):
         self, args, no_encoder_attn=False, add_bias_kv=False, add_zero_attn=False, index=-1
     ):
         super().__init__()
+        self.args = args
         self.ep_group = f"ep_size_{args.ep_world_size}"
         self.embed_dim = args.decoder_embed_dim
         self.dropout_module = FairseqDropout(

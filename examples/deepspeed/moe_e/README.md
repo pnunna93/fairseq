@@ -5,6 +5,8 @@ This page includes instructions for an example implementation of an MoE Transfor
 ## Resources
 
 ### Requirements
+Consider working in a separate python virtual env (e.g. via `conda create --name myclone --clone myenv`).
+
 ```bash
 # Install fairseq from this source
 pip install --editable ./
@@ -81,7 +83,7 @@ fairseq-preprocess \
    1. Example: `transformer_tiny` ==> `transformer_ds_moe_tiny`.
    2. `export ARCH=transformer_ds_moe_{}` before executing `run.sh`.
 
-Use any recipe for a Transformer model from fairseq and add the following arguments (assigned to the variable `${Config[@]}`):
+Use any recipe for a Transformer model from fairseq and add the following arguments (assigned to the array variable `${Config[@]}`):
 ```bash
     NUM_GPUS=${NUM_GPUS:-8}
     NUM_EXPERTS=${NUM_EXPERTS:-8}
@@ -104,8 +106,8 @@ Use any recipe for a Transformer model from fairseq and add the following argume
 #### ***Config details***
 | Argument                  | Values                                                                       | Effect                                                                                                                                                                            |
 |---------------------------|------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `--ddp-backend`           | `legacy_ddp`                                                                 | This is tested only with legacy_ddp mode                                                                                                                                          |
-| `--task`                  | `translation_deepspeed`                                                      | No changes from the base `translation`, only bugfixes                                                                                                                             |
+| `--ddp-backend`           | `legacy_ddp`                                                                 | This code has been tested only with legacy_ddp mode                                                                                                                               |
+| `--task`                  | `translation_deepspeed`                                                      | No functional changes from the base `translation`                                                                                                                                 |
 | `--deepspeed_moe`         | `enc`, `dec`, `enc,dec`                                                      | Enables MoE layers in `enc`oder, `dec`oder or both                                                                                                                                |
 | `--ep-world-size`         | `$NUM_GPUS`                                                                  | Expert world size must equal # of GPUs for now                                                                                                                                    |
 | `--num-experts`           | Number divisible by `$NUM_GPUS`                                              | Total number of experts in the model.                                                                                                                                             |
@@ -159,13 +161,13 @@ Use any recipe for a Transformer model from fairseq and add the following argume
             --tensorboard-logdir "${OUT_DIR?}/tb/${ARCH}-${RUN_NAME}"
 ```
 
-Note that the `--fp16` flag requires you have CUDA 9.1 or greater and a Volta GPU or newer.
+Note that the `--fp16` flag requires CUDA 9.1 or greater and a Volta GPU or newer.
 
 ***IMPORTANT:*** You will get better performance by training with big batches and
 increasing the learning rate. If you want to train the above model with big batches
 (assuming your machine has 8 GPUs):
-- add `--update-freq 16` to simulate training on 8x16=128 GPUs
-- increase the learning rate; 0.001 works well for big batches
+- add `--update-freq 16` to simulate training on `8x16=128` GPUs
+- increase the learning rate; to e.g. `0.001`
 
 ## Evaluate
 
