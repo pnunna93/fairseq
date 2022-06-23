@@ -43,66 +43,18 @@ from fairseq.model_parallel.megatron_trainer import MegatronTrainer
 from fairseq.trainer import Trainer
 from omegaconf import DictConfig, OmegaConf
 
-# from fairseq.pdb import set_trace
-# set_trace()
-
-# x = input('Debug? ')
-# import debugpy
-# debugpy.listen(5678)
-# print('waiting for debugger...')
-# debugpy.wait_for_client()
-# debugpy.breakpoint()
-# print('attached')
 
 
-class ObjectView(object):
-    def __init__(self, d):
-        self.__dict__ = d
-
-def _prepare_deepspeed_config_dict(cfg: FairseqConfig):
-    """
-    Convert relevant settings in MainzTrain config to DeepSpeed config dictionary
-    """
-    ZERO_STAGE = 0
-    FP16 = cfg.common.fp16
-    GRAD_CLIPPING = cfg.optimization.clip_norm # self.opt.get('GRAD_CLIPPING', 0)
-    WORLD_SIZE = cfg.distributed_training.distributed_world_size
-    GRAD_ACCUM = int(cfg.optimization.update_freq[0])
-    deepspeed_config_dict = {}
-    deepspeed_config_dict['gradient_accumulation_steps'] = GRAD_ACCUM
-    deepspeed_config_dict['steps_per_print'] = cfg.common.log_interval
-    deepspeed_config_dict['wall_clock_breakdown'] = False
-    INIT_FP16_SCALE_POWER = int(math.log2(cfg.common.fp16_init_scale))
-    if ZERO_STAGE > 0:
-        logger.info("DeepSpeed ZeRO is turned on. Using fp16 mode. fp16_opt_level is ignored.")
-        deepspeed_config_dict['fp16'] = {'enabled': FP16, 'initial_scale_power': INIT_FP16_SCALE_POWER}
-    else:
-        # Deepspeed amp integration has unresolved bugs right now, so we stick to the fp16 mode
-        # This PR resolves part of the bugs: https://github.com/microsoft/DeepSpeed/pull/290
-        # deepspeed_config_dict['amp'] = {'enabled': FP16, 'opt_level': self.opt['FP16_OPT_LEVEL']}
-        deepspeed_config_dict['fp16'] = {'enabled': FP16, 'initial_scale_power': INIT_FP16_SCALE_POWER}
-    deepspeed_config_dict['zero_optimization'] = {'stage': ZERO_STAGE}
-    deepspeed_config_dict['gradient_clipping'] = GRAD_CLIPPING
-    # 'train_batch_size' is a dummy value here. It is required by DeepSpeed, but We use
-    # our own batch generator in Mainz, so it doesn't affect the actual training process.
-    # It is only used in DeepSpeed for throughput calculation, which we don't look at.
-    # The only requirement is that it is divisible by self.opt['world_size'] * self.grad_acc_steps.
-    print(WORLD_SIZE, GRAD_ACCUM)
-    # exit(1)
-    deepspeed_config_dict['train_batch_size'] = 1 * int(WORLD_SIZE) * int(GRAD_ACCUM)
-
-    # If there are advanced overriding deepspeed settings, apply them to the deepspeed config dictionary
-    # if 'DEEPSPEED_CONFIG_OVERRIDES' in self.opt:
-    #     for k, v in self.opt['DEEPSPEED_CONFIG_OVERRIDES'].items():
-    #         deepspeed_config_dict[k] = v
-
-    return deepspeed_config_dict
 
 def main(cfg: FairseqConfig) -> None:
     if isinstance(cfg, argparse.Namespace):
         cfg = convert_namespace_to_omegaconf(cfg)
 
     utils.import_user_module(cfg.common)
+    from user.ds_utils import (
+        init_deepspeed_env_,
+        load_deepspeed_state_,
+    )
 
     if distributed_utils.is_master(cfg.distributed_training) and "job_logging_cfg" in cfg:
         # make hydra logging work with ddp (see # see https://github.com/facebookresearch/hydra/issues/1126)
@@ -190,10 +142,7 @@ def main(cfg: FairseqConfig) -> None:
     # print(cfg.common)
     # print(cfg.model)
     # raise ValueError
-    init_deepspeed_bool = cfg.model.deepspeed_moe and cfg.distributed_training.distributed_rank is not None
-    if init_deepspeed_bool:
-        import deepspeed
-        os.environ['LOCAL_RANK'] = str(cfg.distributed_training.distributed_rank % cfg.distributed_training.distributed_num_procs)
+    init_deepspeed_env_(cfg)
     if cfg.common.model_parallel_size == 1:
         if cfg.model.deepspeed_moe:
             from user.trainer import DeepspeedETrainer
@@ -223,30 +172,9 @@ def main(cfg: FairseqConfig) -> None:
         disable_iterator_cache=task.has_sharded_data("train"),
     )
     if cfg.model.deepspeed_moe:
-        import deepspeed
-        ds_args = ObjectView({})
-        ds_args.deepspeed = True
-        ds_args.deepspeed_config = None
-        ds_args.local_rank = cfg.distributed_training.distributed_rank % cfg.distributed_training.distributed_num_procs
-        tmp_module, _, _, _ = deepspeed.initialize(args=ds_args,
-                                                    model=trainer.model,
-                                                    dist_init_required=False,
-                                                    config_params=_prepare_deepspeed_config_dict(cfg),
-                                                    # config_params={'train_micro_batch_size_per_gpu': 1,
-                                                    #                 'fp16': {'enabled': cfg.common.fp16},
-                                                    #                 'amp': {'enabled': True}}
-                                                ) # setting amp to be enabled to avoid unnecessary model parameter broadcasting
-        tmp_module: deepspeed.DeepSpeedEngine
-        _load_path, _client_states = tmp_module.load_checkpoint(f"{cfg.checkpoint.save_dir}/deepspeed_moe",
-                            tag=None,
-                            load_module_strict=True,
-                            load_optimizer_states=False,
-                            load_lr_scheduler_states=False,
-                            load_module_only=True)
-        _load_path and logger.warning(f"Loaded DeepSpeed weights from: ``{_load_path}''.")
-        # print(tmp_module)
-        # print(tmp_module.has_moe_layers)
-        del tmp_module
+        ckpt_path = f"{cfg.checkpoint.save_dir}/deepspeed_moe"
+        trainer.ds_module = load_deepspeed_state_(
+            trainer.model.module.module, cfg, ckpt_path)
 
     if cfg.common.tpu:
         import torch_xla.core.xla_model as xm
@@ -433,6 +361,14 @@ def validate_and_save(
     num_updates = trainer.get_num_updates()
     max_update = cfg.optimization.max_update or math.inf
 
+    # if cfg.model.deepspeed_moe:
+    #     from user.ds_utils import save_deepspeed_state_
+    #     save_deepspeed_state_(
+    #         trainer.model.module.module,
+    #         cfg,
+    #         mod=trainer.ds_module,
+    #     )
+
     # Stopping conditions (and an additional one based on validation loss later
     # on)
     should_stop = False
@@ -489,23 +425,12 @@ def validate_and_save(
             cfg.checkpoint, trainer, epoch_itr, valid_losses[0]
         )
         if cfg.model.deepspeed_moe:
-            import deepspeed
-            ds_args = ObjectView({})
-            ds_args.deepspeed = True
-            ds_args.deepspeed_config = None
-            ds_args.local_rank = cfg.distributed_training.distributed_rank % cfg.distributed_training.distributed_num_procs
-            tmp_module, _, _, _ = deepspeed.initialize(args=ds_args,
-                                                        model=trainer.model,
-                                                        dist_init_required=False,
-                                                        config_params={'train_micro_batch_size_per_gpu': 1,
-                                                                        'fp16': {'enabled': cfg.common.fp16},
-                                                                        'amp': {'enabled': True}}) # setting amp to be enabled to avoid unnecessary model parameter broadcasting
-            tmp_module: deepspeed.DeepSpeedEngine
-            cfg: FairseqConfig = cfg
-            tmp_module.save_checkpoint(f"{cfg.checkpoint.save_dir}/deepspeed_moe",
-                                # tag='',
-                                save_latest=not cfg.checkpoint.no_last_checkpoints)
-            del tmp_module
+            from user.ds_utils import save_deepspeed_state_
+            save_deepspeed_state_(
+                trainer.model.module.module,
+                cfg,
+                mod=trainer.ds_module
+            )
 
     return valid_losses, should_stop
 

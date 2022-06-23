@@ -125,7 +125,7 @@ Use any recipe for a Transformer model from fairseq and add the following argume
     # ARCH='transformer_ds_moe_vaswani_wmt_en_de_big'
     ARCH='transformer_ds_moe_tiny'
 
-    python ${USER_DIR?}/train.py \
+    python "${USER_DIR?}/train.py" \
         "${DATABIN?}" \
         --seed 43821 \
         --user-dir "$USER_DIR" \
@@ -177,9 +177,14 @@ Now we can evaluate our trained model.
 
 Next, generate translations using a beam width of 4 and length penalty of 0.6:
 ```bash
-fairseq-generate \
-    data-bin/wmt16_en_de_bpe32k \
-    --path "${LatestCheckpoint} \
+python "${USER_DIR?}/generate.py" \
+    "${DATABIN?}" \
+    --seed 43821 \
+    --user-dir "$USER_DIR" \
+    --path "${LatestCheckpoint}" \
+    --max-tokens-valid "${MAX_TOKENS:-8192}" \
+    --save-dir "${SaveDir}" \
+    --tensorboard-logdir "${OUT_DIR?}/tb/${ARCH}-${RUN_NAME}" \
     --beam 4 --lenpen 0.6 --remove-bpe > gen.out
 ```
 

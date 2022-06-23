@@ -2,6 +2,15 @@
 
 from typing import Dict, List, Tuple, Optional
 
+import logging
+logging.basicConfig(
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    level='INFO',
+    # stream=sys.stdout,
+)
+logger = logging.getLogger('deepspeed_debugging')
+
 import math
 import torch
 import torch.nn as nn

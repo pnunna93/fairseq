@@ -10,6 +10,7 @@ export MKL_THREADING_LAYER="${MKL_THREADING_LAYER:-GNU}"
 
 USER_DIR=${USER_DIR:-"./user"}
 FS_TRAIN="$USER_DIR/train.py"
+FS_GENERATE="$USER_DIR/generate.py"
 
 preprocess() {
     TEXT="${WORKSPACE}/wmt16_en_de"
@@ -62,11 +63,19 @@ fi
 DONT_SAVE="${DONT_SAVE:+"--no-save"}"
 RUN_NAME="${RUN_NAME:-$RUN_NAME_default}"
 
+if [[ "$MNN_DEBUG" ]]; then
+    UPDATE_FREQ=1
+    MAX_TOKENS=512
+    DONT_SAVE=''
+    SAVE_INTERVAL_UPDATES=10
+fi
+
 train() {
     SaveDir="${OUT_DIR?}/checkpoints/${ARCH}-${RUN_NAME}"
     mkdir -p $SaveDir
+        # --distributed-no-spawn \
 
-    python $FS_TRAIN \
+    python "$FS_TRAIN" \
         "${DATABIN?}" \
         --seed 43821 \
         --user-dir "${USER_DIR?}" \
@@ -96,12 +105,46 @@ train() {
             --eval-bleu-print-samples \
         --best-checkpoint-metric bleu --maximize-best-checkpoint-metric \
             --keep-last-epochs 1 \
-            --save-interval-updates 100 \
+            --save-interval-updates "${SAVE_INTERVAL_UPDATES:-100}" \
             --keep-interval-updates 1 \
             --save-dir "${SaveDir}" \
             ${DONT_SAVE} \
             --tensorboard-logdir "$OUT_DIR/tb/${ARCH}-${RUN_NAME}"
 }
 
-train
+generate() {
+    SaveDir="${OUT_DIR?}/tests/${ARCH}-${RUN_NAME}"
+    LatestCheckpoint="${OUT_DIR?}/checkpoints/${ARCH}-${RUN_NAME}/checkpoint_last.pt"
+    mkdir -p "$SaveDir"
+    # python "$FS_GENERATE" \
+    # python \
+    # python -m pdb \
+    # python -m torch.distributed.launch \
+    torchrun \
+    --nproc_per_node=${NUM_GPUS} \
+    --node_rank=${NODE_RANK:-0} \
+    --nnodes=${NODE_COUNT:-1} \
+    --master_addr=${MASTER_ADDR:-127.0.0.1} \
+    --master_port=${MASTER_PORT:-54321} \
+    -- \
+    "$FS_GENERATE" \
+        "${DATABIN?}" \
+        --seed 43821 \
+        --user-dir "$USER_DIR" \
+        --arch $ARCH \
+        "${Config[@]}" \
+        --path "${LatestCheckpoint}" \
+        --beam 4 --lenpen 0.6 --remove-bpe \
+        --save-dir "${SaveDir}" \
+        --tensorboard-logdir "${OUT_DIR?}/tb/${ARCH}-${RUN_NAME}" \
+    > "${SaveDir}/gen.out"
+        # --max-tokens-valid "${MAX_TOKENS:-8192}" \
+}
+
+Func="${1:-train}"
+if [[ "$Func" == 'train' ]]; then
+    train
+elif [[ "$Func" == 'test' ]]; then
+    generate
+fi
 
