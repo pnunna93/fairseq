@@ -66,7 +66,13 @@ train() {
     SaveDir="${OUT_DIR?}/checkpoints/${ARCH}-${RUN_NAME}"
     mkdir -p $SaveDir
 
-    python -m torch.distributed.launch --nproc_per_node=${NUM_GPUS} --node_rank=${NODE_RANK:-0} --nnodes=${NODE_COUNT:-1} --master_addr=${MASTER_ADDR:-127.0.0.1} --master_port=${MASTER_PORT:-54321} $FS_TRAIN \
+    python -m torch.distributed.launch \
+    --nproc_per_node=${NUM_GPUS} \
+    --node_rank=${NODE_RANK:-0} \
+    --nnodes=${NODE_COUNT:-1} \
+    --master_addr=${MASTER_ADDR:-127.0.0.1} \
+    --master_port=${MASTER_PORT:-54321} \
+        $FS_TRAIN \
         "${DATABIN?}" \
         --seed 43821 \
         --user-dir "${USER_DIR?}" \

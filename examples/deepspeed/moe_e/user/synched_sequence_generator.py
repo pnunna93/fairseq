@@ -7,6 +7,9 @@ from torch import Tensor
 from fairseq import search
 from fairseq.ngram_repeat_block import NGramRepeatBlock
 
+import logging
+logger = logging.getLogger(__name__)
+
 class SyncedSequenceGenerator(SequenceGenerator):
     def __init__(
         self,
@@ -82,6 +85,7 @@ class SyncedSequenceGenerator(SequenceGenerator):
         bos_token: Optional[int] = None,
     ):
         import deepspeed.utils.groups as groups
+        logger.warning(f"{self.ep_group=}")
         expert_parallel_group = groups._get_expert_parallel_group(self.ep_group)
         incremental_states = torch.jit.annotate(
             List[Dict[str, Dict[str, Optional[Tensor]]]],

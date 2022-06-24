@@ -16,7 +16,7 @@ from typing import Dict, Optional, Any, List, Tuple, Callable
 
 # We need to setup root logger before importing any fairseq libraries.
 logging.basicConfig(
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    format="%(asctime)s | %(levelname)s | %(name)s | %(funcName)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     level=os.environ.get("LOGLEVEL", "INFO").upper(),
     stream=sys.stdout,
@@ -76,7 +76,7 @@ def main(cfg: FairseqConfig) -> None:
         checkpoint_utils.verify_checkpoint_directory(cfg.checkpoint.save_dir)
 
     # Print args
-    logger.info(cfg)
+    logger.info(f"Config: {cfg}")
 
     if cfg.checkpoint.write_checkpoints_asynchronously:
         try:

@@ -88,7 +88,7 @@ def prepare_deepspeed_config_dict(cfg: FairseqConfig):
         deepspeed_config_dict['fp16'] = {'enabled': FP16, 'initial_scale_power': INIT_FP16_SCALE_POWER}
     deepspeed_config_dict['zero_optimization'] = {'stage': ZERO_STAGE}
     deepspeed_config_dict['gradient_clipping'] = GRAD_CLIPPING
-    # 'train_batch_size' is a dummy value here. It is required by DeepSpeed, but We use
+    #! 'train_batch_size' is a dummy value here. It is required by DeepSpeed, but We use
     # our own batch generator in Mainz, so it doesn't affect the actual training process.
     # It is only used in DeepSpeed for throughput calculation, which we don't look at.
     # The only requirement is that it is divisible by self.opt['world_size'] * self.grad_acc_steps.

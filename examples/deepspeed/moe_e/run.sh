@@ -70,6 +70,9 @@ if [[ "$MNN_DEBUG" ]]; then
     SAVE_INTERVAL_UPDATES=10
 fi
 
+export NCCL_IB_DISABLE=1
+export NCCL_SOCKET_IFNAME=eth0
+
 train() {
     SaveDir="${OUT_DIR?}/checkpoints/${ARCH}-${RUN_NAME}"
     mkdir -p $SaveDir
@@ -120,25 +123,29 @@ generate() {
     # python \
     # python -m pdb \
     # python -m torch.distributed.launch \
-    torchrun \
-    --nproc_per_node=${NUM_GPUS} \
-    --node_rank=${NODE_RANK:-0} \
-    --nnodes=${NODE_COUNT:-1} \
-    --master_addr=${MASTER_ADDR:-127.0.0.1} \
-    --master_port=${MASTER_PORT:-54321} \
-    -- \
+    # torchrun \
+    # --nproc_per_node=${NUM_GPUS} \
+    # --node_rank=${NODE_RANK:-0} \
+    # --nnodes=${NODE_COUNT:-1} \
+    # --master_addr=${MASTER_ADDR:-127.0.0.1} \
+    # --master_port=${MASTER_PORT:-54321} \
+    # -- \
+    # python \
+    deepspeed \
     "$FS_GENERATE" \
         "${DATABIN?}" \
         --seed 43821 \
         --user-dir "$USER_DIR" \
+        --ddp-backend=legacy_ddp --fp16 \
         --arch $ARCH \
         "${Config[@]}" \
         --path "${LatestCheckpoint}" \
-        --beam 4 --lenpen 0.6 --remove-bpe \
+        --beam 2 --lenpen 0.6 --remove-bpe \
         --save-dir "${SaveDir}" \
-        --tensorboard-logdir "${OUT_DIR?}/tb/${ARCH}-${RUN_NAME}" \
-    > "${SaveDir}/gen.out"
-        # --max-tokens-valid "${MAX_TOKENS:-8192}" \
+        --max-tokens "${MAX_GEN_TOKENS:-128}" \
+        --tensorboard-logdir "${OUT_DIR?}/tb/${ARCH}-${RUN_NAME}"
+    # --max-tokens-valid "${MAX_GEN_TOKENS:-512}" \
+    # | tee "${SaveDir}/gen.out"
 }
 
 Func="${1:-train}"
