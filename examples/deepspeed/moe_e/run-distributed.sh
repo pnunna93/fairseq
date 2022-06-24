@@ -36,12 +36,13 @@ ARCH=${ARCH:?"Export ARCH env var to specify an architecture name, e.g. 'transfo
 
 if [[ $ARCH == *ds_moe* ]]; then
     NUM_GPUS=${NUM_GPUS:-8}
+    EP_WORLD_SIZE=${EP_WORLD_SIZE:-${NUM_GPUS}}
     NUM_EXPERTS=${NUM_EXPERTS:-8}
     MOE_MODE=${MOE_MODE:-enc,dec}
     Config=(
         --task 'translation_deepspeed'
         --deepspeed_moe "$MOE_MODE"
-            --ep-world-size $NUM_GPUS
+            --ep-world-size $EP_WORLD_SIZE
             --num-experts   $NUM_EXPERTS
             --top-k 1
         --criterion 'model_and_base'
@@ -49,7 +50,7 @@ if [[ $ARCH == *ds_moe* ]]; then
             --base-criterion 'label_smoothed_cross_entropy'
             --base-criterion-config '{"label_smoothing": 0.1}'
     )
-    RUN_NAME_default="moe_g${NUM_GPUS}_ep${NUM_GPUS}_ex${NUM_EXPERTS}_k1_${MOE_MODE//,/}"
+    RUN_NAME_default="moe_g${NUM_GPUS}_ep${EP_WORLD_SIZE}_ex${NUM_EXPERTS}_k1_${MOE_MODE//,/}"
 else
     Config=(
         --task translation_deepspeed
