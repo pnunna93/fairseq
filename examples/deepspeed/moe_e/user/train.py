@@ -252,16 +252,17 @@ def main(cfg: FairseqConfig) -> None:
     )
     if cfg.model.deepspeed_moe:
         import deepspeed
+        os.environ['LOCAL_RANK'] = str(cfg.distributed_training.device_id)
+        os.environ['OMPI_COMM_WORLD_LOCAL_RANK'] = str(cfg.distributed_training.device_id)
         ds_args = ObjectView({})
         ds_args.deepspeed = True
         ds_args.deepspeed_config = None
-        ds_args.local_rank = cfg.distributed_training.distributed_rank
+        ds_args.local_rank = cfg.distributed_training.device_id
+        deepspeed_config = _prepare_deepspeed_config_dict(cfg)
         tmp_module, _, _, _ = deepspeed.initialize(args=ds_args,
                                                     model=trainer.model,
                                                     dist_init_required=False,
-                                                    config_params={'train_micro_batch_size_per_gpu': 1,
-                                                                    'fp16': {'enabled': cfg.common.fp16},
-                                                                    'amp': {'enabled': True}}) # setting amp to be enabled to avoid unnecessary model parameter broadcasting
+                                                    config_params=deepspeed_config) # setting amp to be enabled to avoid unnecessary model parameter broadcasting
         tmp_module: deepspeed.DeepSpeedEngine
         _load_path, _client_states = tmp_module.load_checkpoint(f"{cfg.checkpoint.save_dir}/deepspeed_moe",
                             tag=None,
