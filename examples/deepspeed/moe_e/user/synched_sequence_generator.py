@@ -86,7 +86,7 @@ class SyncedSequenceGenerator(SequenceGenerator):
     ):
         import deepspeed.utils.groups as groups
         import warnings
-        warnings.warn(f"{self.ep_group=}")
+        warnings.warn(f"{self.ep_group}**")
         expert_parallel_group = groups._get_expert_parallel_group(self.ep_group)
         incremental_states = torch.jit.annotate(
             List[Dict[str, Dict[str, Optional[Tensor]]]],

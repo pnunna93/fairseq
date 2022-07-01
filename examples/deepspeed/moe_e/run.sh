@@ -116,23 +116,24 @@ train() {
 }
 
 generate() {
-    export max_split_size_mb=1024
+    # export max_split_size_mb=1024
     SaveDir="${OUT_DIR?}/tests/${ARCH}-${RUN_NAME}"
     LatestCheckpoint="${OUT_DIR?}/checkpoints/${ARCH}-${RUN_NAME}/checkpoint_last.pt"
     mkdir -p "$SaveDir"
-    # ipython "$FS_GENERATE" \
-    # ipython \
-    # ipython -m pdb \
-    # ipython -m torch.distributed.launch \
+    # python -m pdb \
+    # python -m torch.distributed.launch \
     # torchrun \
-    # --nproc_per_node=${NUM_GPUS} \
-    # --node_rank=${NODE_RANK:-0} \
-    # --nnodes=${NODE_COUNT:-1} \
-    # --master_addr=${MASTER_ADDR:-127.0.0.1} \
-    # --master_port=${MASTER_PORT:-54321} \
+    #   --nproc_per_node=${NUM_GPUS} \
+    #   --node_rank=${NODE_RANK:-0} \
+    #   --nnodes=${NODE_COUNT:-1} \
+    #   --master_addr=${MASTER_ADDR:-127.0.0.1} \
+    #   --master_port=${MASTER_PORT:-54321} \
     # -- \
-    # ipython \
+    # python \
         # --beam 2 --lenpen 0.6 --remove-bpe \
+    # deepspeed \
+    tmpi="$HOME/bin/tmpi.sh"
+    # bash $tmpi 8 \
     deepspeed \
     "$FS_GENERATE" \
         "${DATABIN?}" \

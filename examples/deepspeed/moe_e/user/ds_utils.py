@@ -101,8 +101,8 @@ def prepare_deepspeed_config_dict(cfg: FairseqConfig):
     deepspeed_config_dict['train_batch_size'] = 1 * int(WORLD_SIZE) * int(GRAD_ACCUM)
     # deepspeed_config_dict['train_micro_batch_size_per_gpu'] = 1
     logger.info(
-        f"{WORLD_SIZE=}, {GRAD_ACCUM=}, "
-        f"{cfg.distributed_training.distributed_rank=}, {cfg.distributed_training.distributed_num_procs=}"
+        f"{WORLD_SIZE}**, {GRAD_ACCUM}**, "
+        f"{cfg.distributed_training.distributed_rank}**, {cfg.distributed_training.distributed_num_procs}**"
     )
     # exit(1)
 
@@ -185,7 +185,7 @@ def _load_deepspeed_checkpoint(
             "can not be specified together: " + str(cfg)
         )
 
-    # logger.critical(f"{checkpoint_path=}")
+    # logger.critical(f"{checkpoint_path}**")
     _load_path, _client_states = ds_module.load_checkpoint(
         checkpoint_path,
         tag='default',
@@ -209,7 +209,7 @@ def load_deepspeed_state_(
     if not weights_path:
         weights_path = f"{cfg.checkpoint.save_dir}/checkpoint_last.pt"
     if not os.path.lexists(weights_path):
-        logger.warning(f"Couldn't find {weights_path=}; Skipping load...")
+        logger.warning(f"Couldn't find {weights_path}**; Skipping load...")
         return ds_module
     _load_path, _client_states = _load_deepspeed_checkpoint(
         cfg.checkpoint,
@@ -260,7 +260,7 @@ def _save_deepspeed_checkpoint(
     epoch = epoch_itr.epoch
     end_of_epoch = epoch_itr.end_of_epoch()
     updates = trainer.get_num_updates()
-    logger.critical(f"{trainer.get_num_updates()=}")
+    logger.info(f"{trainer.get_num_updates()}**")
 
     def is_better(a, b):
         return a >= b if cfg.maximize_best_checkpoint_metric else a <= b
@@ -327,7 +327,7 @@ def _save_deepspeed_checkpoint(
                 # PathManager.copy(checkpoints[0], cp, overwrite=True)
                 shutil.copytree(checkpoints[0], cp, dirs_exist_ok=True)
         except:
-            logger.critical(f"{checkpoints[0]=}; Failed at {cp=}")
+            logger.critical(f"{checkpoints[0]}**; Failed copying to {cp}**")
             raise
 
         write_timer.stop()

@@ -60,10 +60,11 @@ class DeepspeedETrainer(Trainer):
             optimizer_overrides=None,
             reset_meters=False,
     ):
-        logger.warning(f"{self.cfg.distributed_training.distributed_rank=}:: {self.is_data_parallel_master=}")
+        logger.warning(f"{self.cfg.distributed_training.distributed_rank}**:: {self.is_data_parallel_master}**")
         base_load_ret = super().load_checkpoint(
             filename, reset_optimizer, reset_lr_scheduler, optimizer_overrides, reset_meters)
-        if self.cfg.model.deepspeed_moe:
+        logger.info(f"Loaded base model checkpoint from {filename} ;;")
+        if False and self.cfg.model.deepspeed_moe:
             from user.ds_utils import load_deepspeed_state_
             ckpt_path = f"{self.cfg.checkpoint.save_dir}/deepspeed_moe"
             self.ds_module = load_deepspeed_state_(
@@ -76,7 +77,7 @@ class DeepspeedETrainer(Trainer):
     def save_checkpoint(self, filename: str, extra_state: dict):
         """Save all training state in a checkpoint file."""
         logger.info(f"Saving checkpoint to {filename}...")
-        logger.warning(f"{self.cfg.distributed_training.distributed_rank=}:: {self.is_data_parallel_master=}")
+        logger.warning(f"{self.cfg.distributed_training.distributed_rank}**:: {self.is_data_parallel_master}**")
         # call state_dict on all ranks in case it needs internal communication
         state_dict = utils.move_to_cpu(self.state_dict())
         state_dict["extra_state"].update(extra_state)

@@ -68,7 +68,7 @@ class TransformerEncoderLayer_MOE(nn.Module):
         super().__init__()
         self.args = args
         self.ep_group = f"ep_size_{args.ep_world_size}"
-        assert self.ep_group, f"{args=}"
+        assert self.ep_group, f"args=={args}"
         self.embed_dim = args.encoder_embed_dim
         self.quant_noise = getattr(args, "quant_noise_pq", 0)
         self.quant_noise_block_size = getattr(args, "quant_noise_pq_block_size", 8) or 8

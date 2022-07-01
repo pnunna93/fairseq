@@ -115,7 +115,7 @@ def _main(cfg: FairseqConfig, output_file):
 
     #? Deepspeed init
     init_deepspeed_env_(cfg)
-    logger.warning(f"{task.cfg=}")
+    logger.warning(f"task.cfg=={task.cfg}")
 
     # Load ensemble
     logger.info("loading model(s) from {}".format(cfg.common_eval.path))
@@ -127,8 +127,11 @@ def _main(cfg: FairseqConfig, output_file):
         strict=(cfg.checkpoint.checkpoint_shard_count == 1),
         num_shards=cfg.checkpoint.checkpoint_shard_count,
     )
-    logger.warning(f"{models[0].args=}")
+    logger.warning(f"{models[0].args}**")
 
+    # ************************************************************************ #
+    # ** Print CUDA env summary
+    # ************************************************************************ #
     cuda = torch.cuda.is_available() and not cfg.common.cpu
     from fairseq.distributed import utils as distributed_utils
     if cuda:
@@ -158,14 +161,14 @@ def _main(cfg: FairseqConfig, output_file):
         if len(models) != 1:
             raise NotImplementedError(
                 f"Ensemble models ({len(models)}) not supported when --deepspeed_moe={cfg.model.deepspeed_moe}.")
-        logger.warning(f"{cfg.distributed_training.distributed_rank=} :: {distributed_utils.get_data_parallel_rank()=}")
+        logger.warning(f"{cfg.distributed_training.distributed_rank}** :: {distributed_utils.get_data_parallel_rank()}**")
         pt_path = utils.split_paths(cfg.common_eval.path)[0]
         moe_ckpt_path = os.path.join(
             os.path.dirname(pt_path),
-            "deepspeed_moe",
+            # "deepspeed_moe",
             os.path.basename(pt_path),
         )
-        load_deepspeed_state_(
+        ds_module = load_deepspeed_state_(
             cfg=cfg,
             model=models[0],
             weights_path=moe_ckpt_path,
