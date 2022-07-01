@@ -30,6 +30,7 @@ from omegaconf import OmegaConf
 logger = logging.getLogger(__name__)
 
 from fairseq.trainer import Trainer
+from deepspeed import DeepSpeedEngine
 
 class DeepspeedETrainer(Trainer):
     """Main class for data parallel training.
@@ -43,12 +44,66 @@ class DeepspeedETrainer(Trainer):
 
     def __init__(self, cfg: FairseqConfig, task, model, criterion, quantizer=None):
         super().__init__(cfg, task, model, criterion, quantizer)
+        self.ds_module: DeepSpeedEngine = None
 
     @property
     def is_moe(self):
         return any(
             getattr(param, 'expert', False) for param in self.model.parameters()
         )
+
+    def load_checkpoint(
+            self,
+            filename,
+            reset_optimizer=False,
+            reset_lr_scheduler=False,
+            optimizer_overrides=None,
+            reset_meters=False,
+    ):
+        logger.warning(f"{self.cfg.distributed_training.distributed_rank=}:: {self.is_data_parallel_master=}")
+        base_load_ret = super().load_checkpoint(
+            filename, reset_optimizer, reset_lr_scheduler, optimizer_overrides, reset_meters)
+        if self.cfg.model.deepspeed_moe:
+            from user.ds_utils import load_deepspeed_state_
+            ckpt_path = f"{self.cfg.checkpoint.save_dir}/deepspeed_moe"
+            self.ds_module = load_deepspeed_state_(
+                self.cfg,
+                self.model.module.module,
+                ckpt_path,
+            )
+        return base_load_ret
+
+    def save_checkpoint(self, filename: str, extra_state: dict):
+        """Save all training state in a checkpoint file."""
+        logger.info(f"Saving checkpoint to {filename}...")
+        logger.warning(f"{self.cfg.distributed_training.distributed_rank=}:: {self.is_data_parallel_master=}")
+        # call state_dict on all ranks in case it needs internal communication
+        state_dict = utils.move_to_cpu(self.state_dict())
+        state_dict["extra_state"].update(extra_state)
+        if self.should_save_checkpoint_on_current_rank:
+            checkpoint_utils.torch_persistent_save(
+                state_dict,
+                filename,
+                async_write=self.cfg.checkpoint.write_checkpoints_asynchronously,
+            )
+        logger.info(f"Finished saving base checkpoint to {filename}")
+        #! FIXME(munael): This leads to a hang for some reason
+        if False and self.cfg.model.deepspeed_moe:
+            from user.ds_utils import save_deepspeed_state_
+            num_updates = self.get_num_updates()
+            assert self.ds_module is not None
+            logger.info(f"Saving MOE checkpoint to fs_update_num_{num_updates}...")
+            moe_save_path = save_deepspeed_state_(
+                cfg=self.cfg,
+                model=self.model.module.module,
+                trainer=self,
+                ds_module=self.ds_module,
+                ckpt_tag=None,
+                    # f"fs_update_num_{num_updates}"
+                    # if num_updates
+                    # else None,
+            )
+            logger.info(f"Finished saving MOE checkpoint to {moe_save_path} ;;")
 
     @metrics.aggregate("train")
     def train_step(self, samples, raise_oom=False):

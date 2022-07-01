@@ -130,8 +130,8 @@ def _main(cfg: FairseqConfig, output_file):
     logger.warning(f"{models[0].args=}")
 
     cuda = torch.cuda.is_available() and not cfg.common.cpu
+    from fairseq.distributed import utils as distributed_utils
     if cuda:
-        from fairseq.distributed import utils as distributed_utils
         cuda_env = utils.CudaEnvironment()
         data_parallel_world_size = (
             1 if cfg.distributed_training.distributed_world_size == 1
@@ -158,15 +158,20 @@ def _main(cfg: FairseqConfig, output_file):
         if len(models) != 1:
             raise NotImplementedError(
                 f"Ensemble models ({len(models)}) not supported when --deepspeed_moe={cfg.model.deepspeed_moe}.")
+        logger.warning(f"{cfg.distributed_training.distributed_rank=} :: {distributed_utils.get_data_parallel_rank()=}")
         pt_path = utils.split_paths(cfg.common_eval.path)[0]
-        ckpt_path = f"{os.path.dirname(pt_path)}/deepspeed_moe"
+        moe_ckpt_path = os.path.join(
+            os.path.dirname(pt_path),
+            "deepspeed_moe",
+            os.path.basename(pt_path),
+        )
         load_deepspeed_state_(
-            models[0],
             cfg=cfg,
-            weights_path=ckpt_path,
+            model=models[0],
+            weights_path=moe_ckpt_path,
             init_kwargs={
                 'dist_init_required': True,
-            }
+            },
         )
 
     # loading the dataset should happen after the checkpoint has been loaded so we can give it the saved task config

@@ -172,9 +172,11 @@ def main(cfg: FairseqConfig) -> None:
         disable_iterator_cache=task.has_sharded_data("train"),
     )
     if cfg.model.deepspeed_moe:
-        ckpt_path = f"{cfg.checkpoint.save_dir}/deepspeed_moe"
+        # ckpt_path = f"{cfg.checkpoint.save_dir}/deepspeed_moe"
         trainer.ds_module = load_deepspeed_state_(
-            trainer.model.module.module, cfg, ckpt_path)
+            cfg=cfg,
+            model=trainer.model.module.module,
+            weights_path=None)
 
     if cfg.common.tpu:
         import torch_xla.core.xla_model as xm
@@ -427,9 +429,16 @@ def validate_and_save(
         if cfg.model.deepspeed_moe:
             from user.ds_utils import save_deepspeed_state_
             save_deepspeed_state_(
-                trainer.model.module.module,
                 cfg,
-                mod=trainer.ds_module
+                model=trainer.model.module.module,
+                trainer=trainer,
+                ds_module=trainer.ds_module,
+                ckpt_tag=None,
+                    # f"fs_update_num_{num_updates}"
+                    # if num_updates
+                    # else None,
+                epoch_itr=epoch_itr,
+                val_loss=valid_losses[0],
             )
 
     return valid_losses, should_stop
