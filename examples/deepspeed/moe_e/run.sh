@@ -66,8 +66,10 @@ RUN_NAME="${RUN_NAME:-$RUN_NAME_default}"
 if [[ "$MNN_DEBUG" ]]; then
     UPDATE_FREQ=1
     MAX_TOKENS=512
+    MAX_GEN_TOKENS=$((8192*8))
     DONT_SAVE=''
     SAVE_INTERVAL_UPDATES=2
+    export LOGLEVEL='DEBUG'
 fi
 
 export NCCL_IB_DISABLE=1
@@ -102,6 +104,7 @@ train() {
         --batch-size-valid "${BATCH_SIZE_VALID:-16}" \
         --eval-bleu \
             --scoring sacrebleu \
+            --beam 2 --lenpen 0.6 --remove-bpe \
             --eval-bleu-args '{"beam": 2, "max_len_a": 1.2, "max_len_b": 10}' \
             --eval-bleu-detok moses \
             --eval-bleu-remove-bpe \
@@ -121,20 +124,19 @@ generate() {
     LatestCheckpoint="${OUT_DIR?}/checkpoints/${ARCH}-${RUN_NAME}/checkpoint_last.pt"
     mkdir -p "$SaveDir"
     # python -m pdb \
-    # python -m torch.distributed.launch \
+    # deepspeed \
+    tmpi="$HOME/bin/tmpi.sh"
+    # bash $tmpi 8 \
+    # deepspeed \
     # torchrun \
+    # python -m torch.distributed.launch \
     #   --nproc_per_node=${NUM_GPUS} \
     #   --node_rank=${NODE_RANK:-0} \
     #   --nnodes=${NODE_COUNT:-1} \
     #   --master_addr=${MASTER_ADDR:-127.0.0.1} \
     #   --master_port=${MASTER_PORT:-54321} \
     # -- \
-    # python \
-        # --beam 2 --lenpen 0.6 --remove-bpe \
-    # deepspeed \
-    tmpi="$HOME/bin/tmpi.sh"
-    # bash $tmpi 8 \
-    deepspeed \
+    python \
     "$FS_GENERATE" \
         "${DATABIN?}" \
         --seed 43821 \
@@ -144,15 +146,15 @@ generate() {
         -s 'de' -t 'en' \
         "${Config[@]}" \
         --path "${LatestCheckpoint}" \
+        --beam 2 --lenpen 0.6 --remove-bpe \
         --scoring sacrebleu \
             --eval-bleu-args '{"beam": 2, "max_len_a": 1.2, "max_len_b": 10}' \
             --eval-bleu-detok moses \
             --eval-bleu-remove-bpe \
         --save-dir "${SaveDir}" \
-        --max-tokens "${MAX_GEN_TOKENS:-1024}" \
+        --max-tokens "${MAX_GEN_TOKENS:-2048}" \
         --tensorboard-logdir "${OUT_DIR?}/tb/${ARCH}-${RUN_NAME}"
-    # --max-tokens-valid "${MAX_GEN_TOKENS:-512}" \
-    # | tee "${SaveDir}/gen.out"
+    # 2>&1 | tee -a ${SaveDir}/gen.log
 }
 
 Func="${1:-train}"

@@ -13,6 +13,8 @@ pip install --editable ./
 python setup.py build_ext --inplace
 pip install deepspeed
 pip install sacremoses
+# The fairseq commit used here is not the latest, and is incompatible with sacrebleu>=2.*
+pip install 'sacrebleu==1.5.*'
 ```
 
 ### Datasets

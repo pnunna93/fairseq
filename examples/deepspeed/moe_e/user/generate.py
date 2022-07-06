@@ -100,6 +100,8 @@ def _main(cfg: FairseqConfig, output_file):
     use_cuda = torch.cuda.is_available() and not cfg.common.cpu
 
     # Load dataset splits
+    from user.tasks.translation_deepspeed import Translation_DS_Task
+    task: Translation_DS_Task
     task = tasks.setup_task(cfg.task)
     cfg.model.deepspeed_moe = getattr(cfg.model, 'deepspeed_moe', False)
     assert cfg.model.deepspeed_moe
@@ -173,7 +175,7 @@ def _main(cfg: FairseqConfig, output_file):
             model=models[0],
             weights_path=moe_ckpt_path,
             init_kwargs={
-                'dist_init_required': True,
+                'dist_init_required': False,
             },
         )
 
@@ -285,6 +287,7 @@ def _main(cfg: FairseqConfig, output_file):
         gen_timer.stop(num_generated_tokens)
 
         for i, sample_id in enumerate(sample["id"].tolist()):
+            print(f'Rank {cfg.distributed_training.distributed_rank}', sample['net_input']['src_tokens'].shape)
             has_target = sample["target"] is not None
 
             # Remove padding
@@ -453,6 +456,7 @@ def _main(cfg: FairseqConfig, output_file):
             1.0 / gen_timer.avg,
         )
     )
+    assert has_target
     if has_target:
         if cfg.bpe and not cfg.generation.sacrebleu:
             if cfg.common_eval.post_process:
@@ -465,7 +469,9 @@ def _main(cfg: FairseqConfig, output_file):
                 )
         # use print to be consistent with other main outputs: S-, H-, T-, D- and so on
         print(
-            "Generate {} with beam={}: {}".format(
+            str((f'Rank {cfg.distributed_training.distributed_rank}', num_sentences))
+            +
+            " | Generate {} with beam={}: {}".format(
                 cfg.dataset.gen_subset, cfg.generation.beam, scorer.result_string()
             ),
             file=output_file,
