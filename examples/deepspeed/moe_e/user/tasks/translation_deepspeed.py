@@ -32,7 +32,7 @@ from fairseq.tasks import FairseqTask, register_task
 from fairseq.optim.amp_optimizer import AMPOptimizer
 
 from fairseq import search
-from ..synched_sequence_generator import SyncedSequenceGenerator
+from ..synced_sequence_generator import SyncedSequenceGenerator
 
 
 EVAL_BLEU_ORDER = 4

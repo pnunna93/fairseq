@@ -2,13 +2,67 @@ import math
 from typing import Dict, List, Optional
 
 import torch
-from fairseq.sequence_generator import SequenceGenerator, EnsembleModel
 from torch import Tensor
+
+from fairseq.sequence_generator import SequenceGenerator, EnsembleModel
 from fairseq import search
 from fairseq.ngram_repeat_block import NGramRepeatBlock
+from fairseq.dataclass.configs import FairseqConfig
 
 import logging
 logger = logging.getLogger(__name__)
+
+def synchronized_batch_generator(
+        cfg: FairseqConfig, batch_generator, sync_every=1
+):
+    # expert_parallelism = cfg.get('num_experts', 1)
+    expert_parallelism = cfg.model.num_experts
+    device = cfg.distributed_training.device_id
+    if expert_parallelism > 1:
+        import deepspeed.utils.groups as groups
+        ep_group = f"ep_size_{cfg.model.ep_world_size}"
+        expert_parallel_world_size = groups._get_expert_parallel_world_size(ep_group)
+        expert_parallel_group = groups._get_expert_parallel_group(ep_group)
+    else:
+        expert_parallel_world_size = 1
+        expert_parallel_group = None
+    def sync(val, cnt):
+        if cnt % sync_every == 0:
+            counter_tensor = torch.tensor([val, cnt]).to(device)
+            torch.distributed.all_reduce(counter_tensor, torch.distributed.ReduceOp.SUM, group=expert_parallel_group)
+            val, cnt_sum = counter_tensor.tolist()
+            assert cnt_sum == cnt * expert_parallel_world_size, f"{cnt_sum} not equal to {cnt} * {expert_parallel_world_size}"
+            # logger.warning(f"Batch: {cnt}, rank: {device}. {val} ranks have finished with the real data loader. expert_parallel_world_size = {expert_parallel_world_size}")
+            return val
+        else:
+            return val
+
+    batch_counter = 0
+    logger.warning(f"Entering...  rank: {cfg.distributed_training.distributed_rank}::{device}")
+    for batch in batch_generator:
+        if batch_counter == 0:
+            dummy_batch = batch
+
+        # Fairseq specific - last batch is always empty for some reason
+        if "net_input" not in batch:
+            continue
+
+        if expert_parallel_world_size > 1:
+            # print(f"i: {batch_counter}, rank: {device} - BEFORE SYNC")
+            sync(0, batch_counter)
+            # print(f"i: {batch_counter}, rank: {device} - sh: {batch['mt']['encoders_input_ids'].shape}")
+
+        batch_counter += 1
+        yield batch, False
+
+    if expert_parallel_world_size > 1:
+        # print(f"[DUMMY] i: {batch_counter}, rank:  {device} - BEFORE SYNC")
+        while sync(1, batch_counter) < expert_parallel_world_size:
+            # print(f"[DUMMY] i: {batch_counter}, rank: {device} - sh: {dummy_batch['mt']['encoders_input_ids'].shape}")
+            batch_counter += 1
+            yield dummy_batch, True
+            # print(f"[DUMMY] i: {batch_counter}, rank:  {device} - BEFORE SYNC")
+    logger.warning(f"Exiting...  rank: {cfg.distributed_training.distributed_rank}::{device}")
 
 class SyncedSequenceGenerator(SequenceGenerator):
     def __init__(

@@ -66,7 +66,7 @@ RUN_NAME="${RUN_NAME:-$RUN_NAME_default}"
 if [[ "$MNN_DEBUG" ]]; then
     UPDATE_FREQ=1
     MAX_TOKENS=512
-    MAX_GEN_TOKENS=$((8192*8))
+    MAX_GEN_TOKENS=$((4*8))
     DONT_SAVE=''
     SAVE_INTERVAL_UPDATES=2
     export LOGLEVEL='DEBUG'
@@ -145,6 +145,7 @@ generate() {
         --arch $ARCH \
         -s 'de' -t 'en' \
         "${Config[@]}" \
+        --quiet \
         --path "${LatestCheckpoint}" \
         --beam 2 --lenpen 0.6 --remove-bpe \
         --scoring sacrebleu \

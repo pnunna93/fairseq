@@ -230,6 +230,8 @@ def _main(cfg: FairseqConfig, output_file):
         num_workers=cfg.dataset.num_workers,
         data_buffer_size=cfg.dataset.data_buffer_size,
     ).next_epoch_itr(shuffle=False)
+    from user.synced_sequence_generator import synchronized_batch_generator
+    itr = synchronized_batch_generator(cfg, itr, sync_every=1)
     progress = progress_bar.progress_bar(
         itr,
         log_format=cfg.common.log_format,
@@ -262,8 +264,10 @@ def _main(cfg: FairseqConfig, output_file):
     num_sentences = 0
     has_target = True
     wps_meter = TimeMeter()
-    for sample in progress:
+    for (sample, is_dummy) in progress:
         sample = utils.move_to_cuda(sample) if use_cuda else sample
+
+        # Seems like fairseq's dataloader creates an empty batch right before exhausting it.
         if "net_input" not in sample:
             continue
 
@@ -276,6 +280,7 @@ def _main(cfg: FairseqConfig, output_file):
             constraints = sample["constraints"]
 
         gen_timer.start()
+
         hypos = task.inference_step(
             generator,
             models,
@@ -283,11 +288,14 @@ def _main(cfg: FairseqConfig, output_file):
             prefix_tokens=prefix_tokens,
             constraints=constraints,
         )
+        if is_dummy:
+            # logger.warning(f"Found a dummy batch at rank: {cfg.distributed_training.device_id};;")
+            continue
         num_generated_tokens = sum(len(h[0]["tokens"]) for h in hypos)
         gen_timer.stop(num_generated_tokens)
 
         for i, sample_id in enumerate(sample["id"].tolist()):
-            print(f'Rank {cfg.distributed_training.distributed_rank}', sample['net_input']['src_tokens'].shape)
+            # print(f'Rank {cfg.distributed_training.distributed_rank}', sample['net_input']['src_tokens'].shape)
             has_target = sample["target"] is not None
 
             # Remove padding
