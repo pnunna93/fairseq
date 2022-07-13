@@ -35,42 +35,8 @@ preprocess() {
 # ARCH='transformer_tiny'
 ARCH=${ARCH:?"Export ARCH env var to specify an architecture name, e.g. 'transformer_ds_moe_tiny'."}
 
-if [[ $ARCH == *ds_moe* ]]; then
-    NUM_GPUS=${NUM_GPUS:-8}
-    NUM_EXPERTS=${NUM_EXPERTS:-8}
-    MOE_MODE=${MOE_MODE:-enc,dec}
-    Config=(
-        --task 'translation_deepspeed'
-        --deepspeed_moe "$MOE_MODE"
-            --ep-world-size $NUM_GPUS
-            --num-experts   $NUM_EXPERTS
-            --top-k 1
-        --criterion 'model_and_base'
-            --loss-weights '{"base_crit": 1, "experts_gate_loss": 10}'
-            --base-criterion 'label_smoothed_cross_entropy'
-            --base-criterion-config '{"label_smoothing": 0.1}'
-    )
-    RUN_NAME_default="moe_g${NUM_GPUS}_ep${NUM_GPUS}_ex${NUM_EXPERTS}_k1_${MOE_MODE//,/}"
-else
-    Config=(
-        --task translation_deepspeed
-        --criterion label_smoothed_cross_entropy
-            --label-smoothing 0.1
-    )
-    RUN_NAME_default=baseline
-fi
-
 DONT_SAVE="${DONT_SAVE:+"--no-save"}"
 RUN_NAME="${RUN_NAME:-$RUN_NAME_default}"
-
-if [[ "$MNN_DEBUG" ]]; then
-    UPDATE_FREQ=1
-    MAX_TOKENS=512
-    MAX_GEN_TOKENS=$((4*8))
-    DONT_SAVE=''
-    SAVE_INTERVAL_UPDATES=2
-    export LOGLEVEL='DEBUG'
-fi
 
 export NCCL_IB_DISABLE=1
 export NCCL_SOCKET_IFNAME=eth0
@@ -104,7 +70,6 @@ train() {
         --batch-size-valid "${BATCH_SIZE_VALID:-16}" \
         --eval-bleu \
             --scoring sacrebleu \
-            --beam 2 --lenpen 0.6 --remove-bpe \
             --eval-bleu-args '{"beam": 2, "max_len_a": 1.2, "max_len_b": 10}' \
             --eval-bleu-detok moses \
             --eval-bleu-remove-bpe \
@@ -116,6 +81,7 @@ train() {
             --save-dir "${SaveDir}" \
             ${DONT_SAVE} \
             --tensorboard-logdir "$OUT_DIR/tb/${ARCH}-${RUN_NAME}"
+        # --beam 2 --lenpen 0.6 --remove-bpe \
 }
 
 generate() {
@@ -157,6 +123,43 @@ generate() {
         --tensorboard-logdir "${OUT_DIR?}/tb/${ARCH}-${RUN_NAME}"
     # 2>&1 | tee -a ${SaveDir}/gen.log
 }
+
+if [[ "$MNN_DEBUG" ]]; then
+    UPDATE_FREQ=1
+    MAX_TOKENS=512
+    # MAX_GEN_TOKENS=$((4*8))
+    NUM_EXPERTS=4
+    EP_WORLD_SIZE=4
+    MAX_GEN_TOKENS=8192
+    DONT_SAVE=''
+    SAVE_INTERVAL_UPDATES=2
+    export LOGLEVEL='DEBUG'
+fi
+if [[ $ARCH == *ds_moe* ]]; then
+    NUM_GPUS=${NUM_GPUS:-8}
+    NUM_EXPERTS=${NUM_EXPERTS:-8}
+    MOE_MODE=${MOE_MODE:-enc,dec}
+    EP_WORLD_SIZE=${EP_WORLD_SIZE:-$NUM_GPUS}
+    Config=(
+        --task 'translation_deepspeed'
+        --deepspeed_moe "$MOE_MODE"
+            --ep-world-size $EP_WORLD_SIZE
+            --num-experts   $NUM_EXPERTS
+            --top-k 1
+        --criterion 'model_and_base'
+            --loss-weights '{"base_crit": 1, "experts_gate_loss": 10}'
+            --base-criterion 'label_smoothed_cross_entropy'
+            --base-criterion-config '{"label_smoothing": 0.1}'
+    )
+    RUN_NAME_default="moe_g${NUM_GPUS}_ep${NUM_GPUS}_ex${NUM_EXPERTS}_k1_${MOE_MODE//,/}"
+else
+    Config=(
+        --task translation_deepspeed
+        --criterion label_smoothed_cross_entropy
+            --label-smoothing 0.1
+    )
+    RUN_NAME_default=baseline
+fi
 
 Func="${1:-train}"
 if [[ "$Func" == 'train' ]]; then

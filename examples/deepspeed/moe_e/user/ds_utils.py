@@ -319,13 +319,21 @@ def _save_deepspeed_checkpoint(
     if len(checkpoints) > 0:
         # trainer._save_deepspeed_checkpoint(checkpoints[0], extra_state)
         try:
+            main_ckpt = checkpoints[0]
             ds_module.save_checkpoint(
-                            checkpoints[0],
+                            main_ckpt,
                             tag='default',
                             save_latest=False)
             for cp in checkpoints[1:]:
                 # PathManager.copy(checkpoints[0], cp, overwrite=True)
-                shutil.copytree(checkpoints[0], cp, dirs_exist_ok=True)
+                try:
+                    shutil.copytree(main_ckpt, cp, dirs_exist_ok=True)
+                except TypeError as exc:
+                    logger.error(f"Failed an overwriting copy to {cp}; will remove "
+                                 f"existing checkpoint directory first, which might leave it corrupted.",
+                                 exc_info=True)
+                    shutil.rmtree(cp, ignore_errors=True)
+                    shutil.copytree(main_ckpt, cp)
         except:
             logger.critical(f"{checkpoints[0]}**; Failed copying to {cp}**")
             raise
