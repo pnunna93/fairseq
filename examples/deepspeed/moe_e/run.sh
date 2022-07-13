@@ -44,7 +44,6 @@ export NCCL_SOCKET_IFNAME=eth0
 train() {
     SaveDir="${OUT_DIR?}/checkpoints/${ARCH}-${RUN_NAME}"
     mkdir -p $SaveDir
-        # --distributed-no-spawn \
 
     python "$FS_TRAIN" \
         "${DATABIN?}" \
@@ -81,7 +80,6 @@ train() {
             --save-dir "${SaveDir}" \
             ${DONT_SAVE} \
             --tensorboard-logdir "$OUT_DIR/tb/${ARCH}-${RUN_NAME}"
-        # --beam 2 --lenpen 0.6 --remove-bpe \
 }
 
 generate() {
@@ -89,10 +87,6 @@ generate() {
     SaveDir="${OUT_DIR?}/tests/${ARCH}-${RUN_NAME}"
     LatestCheckpoint="${OUT_DIR?}/checkpoints/${ARCH}-${RUN_NAME}/checkpoint_last.pt"
     mkdir -p "$SaveDir"
-    # python -m pdb \
-    # deepspeed \
-    tmpi="$HOME/bin/tmpi.sh"
-    # bash $tmpi 8 \
     # deepspeed \
     # torchrun \
     # python -m torch.distributed.launch \
@@ -127,7 +121,6 @@ generate() {
 if [[ "$MNN_DEBUG" ]]; then
     UPDATE_FREQ=1
     MAX_TOKENS=512
-    # MAX_GEN_TOKENS=$((4*8))
     NUM_EXPERTS=4
     EP_WORLD_SIZE=4
     MAX_GEN_TOKENS=8192
@@ -135,6 +128,7 @@ if [[ "$MNN_DEBUG" ]]; then
     SAVE_INTERVAL_UPDATES=2
     export LOGLEVEL='DEBUG'
 fi
+
 if [[ $ARCH == *ds_moe* ]]; then
     NUM_GPUS=${NUM_GPUS:-8}
     NUM_EXPERTS=${NUM_EXPERTS:-8}
@@ -151,7 +145,7 @@ if [[ $ARCH == *ds_moe* ]]; then
             --base-criterion 'label_smoothed_cross_entropy'
             --base-criterion-config '{"label_smoothing": 0.1}'
     )
-    RUN_NAME_default="moe_g${NUM_GPUS}_ep${NUM_GPUS}_ex${NUM_EXPERTS}_k1_${MOE_MODE//,/}"
+    RUN_NAME_default="moe_g${NUM_GPUS}_ep${EP_WORLD_SIZE}_ex${NUM_EXPERTS}_k1_${MOE_MODE//,/}"
 else
     Config=(
         --task translation_deepspeed
