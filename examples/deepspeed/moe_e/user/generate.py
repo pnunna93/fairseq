@@ -154,7 +154,10 @@ def _main(cfg: FairseqConfig, output_file):
             cuda_env_arr = [cuda_env]
         if data_parallel_rank == 0:
             utils.CudaEnvironment.pretty_print_cuda_env_list(cuda_env_arr)
+        DISTRIBUTED_RANK = cfg.distributed_training.distributed_rank
+        assert DISTRIBUTED_RANK is not None
     else:
+        raise NotImplementedError("CPU mode not supported for this Deepspeed MoE example.")
         cuda_env = None
         cuda_env_arr = None
 
@@ -163,7 +166,7 @@ def _main(cfg: FairseqConfig, output_file):
         if len(models) != 1:
             raise NotImplementedError(
                 f"Ensemble models ({len(models)}) not supported when --deepspeed_moe={cfg.model.deepspeed_moe}.")
-        logger.warning(f"{cfg.distributed_training.distributed_rank}** :: {distributed_utils.get_data_parallel_rank()}**")
+        logger.debug(f"{DISTRIBUTED_RANK}** :: {distributed_utils.get_data_parallel_rank()}**")
         pt_path = utils.split_paths(cfg.common_eval.path)[0]
         moe_ckpt_path = os.path.join(
             os.path.dirname(pt_path),
@@ -226,7 +229,7 @@ def _main(cfg: FairseqConfig, output_file):
         required_batch_size_multiple=cfg.dataset.required_batch_size_multiple,
         seed=cfg.common.seed,
         num_shards=cfg.distributed_training.distributed_world_size,
-        shard_id=cfg.distributed_training.distributed_rank,
+        shard_id=DISTRIBUTED_RANK,
         num_workers=cfg.dataset.num_workers,
         data_buffer_size=cfg.dataset.data_buffer_size,
     ).next_epoch_itr(shuffle=False)
@@ -264,6 +267,8 @@ def _main(cfg: FairseqConfig, output_file):
     num_sentences = 0
     has_target = True
     wps_meter = TimeMeter()
+    total_predictions = []
+
     for (sample, is_dummy) in progress:
         sample = utils.move_to_cuda(sample) if use_cuda else sample
 
@@ -295,7 +300,7 @@ def _main(cfg: FairseqConfig, output_file):
         gen_timer.stop(num_generated_tokens)
 
         for i, sample_id in enumerate(sample["id"].tolist()):
-            # print(f'Rank {cfg.distributed_training.distributed_rank}', sample['net_input']['src_tokens'].shape)
+            # print(f'Rank {DISTRIBUTED_RANK}', sample['net_input']['src_tokens'].shape)
             has_target = sample["target"] is not None
 
             # Remove padding
@@ -444,6 +449,7 @@ def _main(cfg: FairseqConfig, output_file):
                             detok_hypo_str, add_if_not_exist=True
                         )
                     if hasattr(scorer, "add_string"):
+                        total_predictions.append((target_str, detok_hypo_str))
                         scorer.add_string(target_str, detok_hypo_str)
                     else:
                         scorer.add(target_tokens, hypo_tokens)
@@ -476,14 +482,40 @@ def _main(cfg: FairseqConfig, output_file):
                     "If you are using BPE on the target side, the BLEU score is computed on BPE tokens, not on proper words.  Use --sacrebleu for standard 13a BLEU tokenization"
                 )
         # use print to be consistent with other main outputs: S-, H-, T-, D- and so on
-        print(
-            str((f'Rank {cfg.distributed_training.distributed_rank}', num_sentences))
-            +
-            " | Generate {} with beam={}: {}".format(
-                cfg.dataset.gen_subset, cfg.generation.beam, scorer.result_string()
-            ),
-            file=output_file,
-        )
+        GATHER_RESULTS = True
+        if GATHER_RESULTS:
+            import deepspeed.utils.groups as groups
+            expert_parallel_group = groups._get_expert_parallel_group(f"ep_size_{cfg.model.ep_world_size}")
+            # logger.warning("Rank {} is here".format(DISTRIBUTED_RANK))
+            
+            # get language-direction
+            object_list = [None] * cfg.distributed_training.distributed_world_size
+            torch.distributed.all_gather_object(
+                object_list,
+                total_predictions,
+                group=expert_parallel_group)
+
+            # Only score on rank 0
+            if DISTRIBUTED_RANK == 0:
+                scorer_rank_0 = scoring.build_scorer(cfg.scoring, tgt_dict)
+                for target_str, detok_hypo_str in [item for predlist in object_list for item in predlist]:
+                    scorer_rank_0.add_string(target_str, detok_hypo_str)
+
+                # append print to file
+                # with open(os.path.join("scores.txt"), "a") as f:
+                #     f.write(f"{cfg.task.source_lang}-{cfg.task.target_lang} ")
+                #     f.write(scorer_rank_0.result_string())
+                #     f.write("\n")
+                scorer = scorer_rank_0
+        if DISTRIBUTED_RANK == 0 or not GATHER_RESULTS:
+            print(
+                f"[Rank {DISTRIBUTED_RANK}, {num_sentences}]"
+                +
+                " | Generate {} with beam={}: {}".format(
+                    cfg.dataset.gen_subset, cfg.generation.beam, scorer.result_string()
+                ),
+                file=output_file,
+            )
 
     return scorer
 

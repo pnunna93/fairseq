@@ -64,9 +64,9 @@ train() {
             --warmup-updates 4000 \
         --max-update 300000 \
         --max-tokens "${MAX_TOKENS:-8192}" \
+        --max-tokens-valid "${MAX_GEN_TOKENS:-4096}" \
             --update-freq "${UPDATE_FREQ:-16}" \
         --validate-interval-updates 20 \
-        --batch-size-valid "${BATCH_SIZE_VALID:-16}" \
         --eval-bleu \
             --scoring sacrebleu \
             --eval-bleu-args '{"beam": 2, "max_len_a": 1.2, "max_len_b": 10}' \
@@ -80,10 +80,11 @@ train() {
             --save-dir "${SaveDir}" \
             ${DONT_SAVE} \
             --tensorboard-logdir "$OUT_DIR/tb/${ARCH}-${RUN_NAME}"
+        # --batch-size-valid "${BATCH_SIZE_VALID:-16}" \
 }
 
 generate() {
-    # export max_split_size_mb=1024
+    # export PYTORCH_CUDA_ALLOC_CONF='max_split_size_mb:4096'
     SaveDir="${OUT_DIR?}/tests/${ARCH}-${RUN_NAME}"
     LatestCheckpoint="${OUT_DIR?}/checkpoints/${ARCH}-${RUN_NAME}/checkpoint_last.pt"
     mkdir -p "$SaveDir"
@@ -96,6 +97,7 @@ generate() {
     #   --master_addr=${MASTER_ADDR:-127.0.0.1} \
     #   --master_port=${MASTER_PORT:-54321} \
     # -- \
+    # --quiet \
     python \
     "$FS_GENERATE" \
         "${DATABIN?}" \
@@ -105,13 +107,11 @@ generate() {
         --arch $ARCH \
         -s 'de' -t 'en' \
         "${Config[@]}" \
-        --quiet \
         --path "${LatestCheckpoint}" \
-        --beam 2 --lenpen 0.6 --remove-bpe \
         --scoring sacrebleu \
-            --eval-bleu-args '{"beam": 2, "max_len_a": 1.2, "max_len_b": 10}' \
-            --eval-bleu-detok moses \
-            --eval-bleu-remove-bpe \
+            --tokenizer moses \
+            --beam 2 --lenpen 0.6 --remove-bpe \
+            --max-len-a 1.2 --max-len-b 10 \
         --save-dir "${SaveDir}" \
         --max-tokens "${MAX_GEN_TOKENS:-2048}" \
         --tensorboard-logdir "${OUT_DIR?}/tb/${ARCH}-${RUN_NAME}"
@@ -121,9 +121,9 @@ generate() {
 if [[ "$MNN_DEBUG" ]]; then
     UPDATE_FREQ=1
     MAX_TOKENS=512
-    NUM_EXPERTS=4
-    EP_WORLD_SIZE=4
-    MAX_GEN_TOKENS=8192
+    # NUM_EXPERTS=4
+    # EP_WORLD_SIZE=4
+    MAX_GEN_TOKENS=4096
     DONT_SAVE=''
     SAVE_INTERVAL_UPDATES=2
     export LOGLEVEL='DEBUG'
