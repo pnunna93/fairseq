@@ -63,8 +63,8 @@ train() {
             --lr-scheduler inverse_sqrt \
             --warmup-updates 4000 \
         --max-update 300000 \
-        --max-tokens "${MAX_TOKENS:-8192}" \
         --max-tokens-valid "${MAX_GEN_TOKENS:-4096}" \
+        --max-tokens "${MAX_TOKENS:-8192}" \
             --update-freq "${UPDATE_FREQ:-16}" \
         --validate-interval-updates 20 \
         --eval-bleu \
@@ -113,7 +113,7 @@ generate() {
             --beam 2 --lenpen 0.6 --remove-bpe \
             --max-len-a 1.2 --max-len-b 10 \
         --save-dir "${SaveDir}" \
-        --max-tokens "${MAX_GEN_TOKENS:-2048}" \
+        --max-tokens "${MAX_GEN_TOKENS:-4096}" \
         --tensorboard-logdir "${OUT_DIR?}/tb/${ARCH}-${RUN_NAME}"
     # 2>&1 | tee -a ${SaveDir}/gen.log
 }
@@ -121,8 +121,8 @@ generate() {
 if [[ "$MNN_DEBUG" ]]; then
     UPDATE_FREQ=1
     MAX_TOKENS=512
-    # NUM_EXPERTS=4
-    # EP_WORLD_SIZE=4
+    NUM_EXPERTS=4
+    EP_WORLD_SIZE=4
     MAX_GEN_TOKENS=4096
     DONT_SAVE=''
     SAVE_INTERVAL_UPDATES=2
@@ -132,8 +132,8 @@ fi
 if [[ $ARCH == *ds_moe* ]]; then
     NUM_GPUS=${NUM_GPUS:-8}
     NUM_EXPERTS=${NUM_EXPERTS:-8}
+    EP_WORLD_SIZE=${EP_WORLD_SIZE:-$((NUM_EXPERTS < NUM_GPUS ? NUM_EXPERTS : NUM_GPUS))}
     MOE_MODE=${MOE_MODE:-enc,dec}
-    EP_WORLD_SIZE=${EP_WORLD_SIZE:-$NUM_GPUS}
     Config=(
         --task 'translation_deepspeed'
         --deepspeed_moe "$MOE_MODE"

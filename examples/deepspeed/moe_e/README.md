@@ -89,12 +89,13 @@ Use any recipe for a Transformer model from fairseq and add the following argume
 ```bash
     NUM_GPUS=${NUM_GPUS:-8}
     NUM_EXPERTS=${NUM_EXPERTS:-8}
+    EP_WORLD_SIZE=${EP_WORLD_SIZE:-8}
     MOE_MODE=${MOE_MODE:-enc,dec}
     Config=(
         --ddp-backend=legacy_ddp
         --task 'translation_deepspeed'
         --deepspeed_moe "$MOE_MODE"
-            --ep-world-size $NUM_GPUS
+            --ep-world-size $EP_WORLD_SIZE
             --num-experts   $NUM_EXPERTS
             --top-k 1
         --criterion 'model_and_base'
@@ -102,7 +103,7 @@ Use any recipe for a Transformer model from fairseq and add the following argume
             --base-criterion 'label_smoothed_cross_entropy'
             --base-criterion-config '{"label_smoothing": 0.1}'
     )
-    RUN_NAME="moe_g${NUM_GPUS}_ep${NUM_GPUS}_ex${NUM_EXPERTS}_k1_${MOE_MODE//,/}"
+    RUN_NAME="moe_g${NUM_GPUS}_ep${EP_WORLD_SIZE}_ex${NUM_EXPERTS}_k1_${MOE_MODE//,/}"
 ```
 
 #### ***Config details***
@@ -111,8 +112,8 @@ Use any recipe for a Transformer model from fairseq and add the following argume
 | `--ddp-backend`           | `legacy_ddp`                                                                 | This code has been tested only with legacy_ddp mode                                                                                                                               |
 | `--task`                  | `translation_deepspeed`                                                      | No functional changes from the base `translation`                                                                                                                                 |
 | `--deepspeed_moe`         | `enc`, `dec`, `enc,dec`                                                      | Enables MoE layers in `enc`oder, `dec`oder or both                                                                                                                                |
-| `--ep-world-size`         | `$NUM_GPUS`                                                                  | Expert world size must equal # of GPUs for now                                                                                                                                    |
-| `--num-experts`           | Number divisible by `$NUM_GPUS`                                              | Total number of experts in the model.                                                                                                                                             |
+| `--ep-world-size`         | `$EP_WORLD_SIZE`                                                             | Expert parallelism world size. Should be equal to `NUM_GPUS` unless `NUM_EXPERTS < NUM_GPUS` then it should equal `NUM_EXPERTS`. `NUM_GPU` must divide `EP_WORLD_SIZE`.           |
+| `--num-experts`           | Number divisible by `$EP_WORLD_SIZE`                                         | Total number of experts in the model.                                                                                                                                             |
 | `--top-k`                 | `1`, `2`                                                                     | Expert selection mode.                                                                                                                                                            |
 | `--criterion`             | `model_and_base`                                                             | The `model_and_base` custom criterion uses any loss returned by the model (e.g. `expert_gate_loss` in this case) plus another specified "base criterion".                         |
 | `--loss-weights`          | String of a json dictionary of `"{crit_name}": float(crit_weight)`  KV pairs | The final loss is the weighted sum of the model loss(es) and the base criterion's loss, weighted by the provided value or `1.0` otherwise. `null` ignores the corresponding loss. |
@@ -145,13 +146,13 @@ Use any recipe for a Transformer model from fairseq and add the following argume
             --lr-scheduler inverse_sqrt \
             --warmup-updates 4000 \
         --max-update 300000 \
-        --max-tokens-valid "${MAX_TOKENS:-8192}" \
+        --max-tokens-valid "${MAX_TOKENS:-4096}" \
         --max-tokens "${MAX_TOKENS:-8192}" \
             --update-freq "${UPDATE_FREQ:-16}" \
         --validate-interval-updates 20 \
         --eval-bleu \
             --scoring sacrebleu \
-            --eval-bleu-args '{"beam": 5, "max_len_a": 1.2, "max_len_b": 10}' \
+            --eval-bleu-args '{"beam": 4, "max_len_a": 1.2, "max_len_b": 10}' \
             --eval-bleu-detok moses \
             --eval-bleu-remove-bpe \
             --eval-bleu-print-samples \
@@ -184,10 +185,14 @@ python "${USER_DIR?}/generate.py" \
     --seed 43821 \
     --user-dir "$USER_DIR" \
     --path "${LatestCheckpoint}" \
-    --max-tokens-valid "${MAX_TOKENS:-8192}" \
+    --max-tokens "${MAX_TOKENS:-4096}" \
+    --scoring sacrebleu \
+        --tokenizer moses \
+        --beam 4 --lenpen 0.6 --remove-bpe \
+        --max-len-a 1.2 --max-len-b 10 \
     --save-dir "${SaveDir}" \
     --tensorboard-logdir "${OUT_DIR?}/tb/${ARCH}-${RUN_NAME}" \
-    --beam 4 --lenpen 0.6 --remove-bpe > gen.out
+    > gen.out
 ```
 
 To compute detokenized BLEU with sacrebleu (preferred):
