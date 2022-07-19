@@ -154,7 +154,8 @@ def _main(cfg: FairseqConfig, output_file):
             cuda_env_arr = [cuda_env]
         if data_parallel_rank == 0:
             utils.CudaEnvironment.pretty_print_cuda_env_list(cuda_env_arr)
-        DISTRIBUTED_RANK = cfg.distributed_training.distributed_rank
+        # DISTRIBUTED_RANK = cfg.distributed_training.distributed_rank
+        DISTRIBUTED_RANK = data_parallel_rank
         assert DISTRIBUTED_RANK is not None
     else:
         raise NotImplementedError("CPU mode not supported for this Deepspeed MoE example.")
@@ -166,7 +167,7 @@ def _main(cfg: FairseqConfig, output_file):
         if len(models) != 1:
             raise NotImplementedError(
                 f"Ensemble models ({len(models)}) not supported when --deepspeed_moe={cfg.model.deepspeed_moe}.")
-        logger.debug(f"{DISTRIBUTED_RANK}** :: {distributed_utils.get_data_parallel_rank()}**")
+        logger.debug(f"Data parallel rank: {DISTRIBUTED_RANK}** :: {distributed_utils.get_data_parallel_rank()}**")
         pt_path = utils.split_paths(cfg.common_eval.path)[0]
         moe_ckpt_path = os.path.join(
             os.path.dirname(pt_path),
@@ -485,20 +486,30 @@ def _main(cfg: FairseqConfig, output_file):
         GATHER_RESULTS = True
         if GATHER_RESULTS:
             import deepspeed.utils.groups as groups
-            expert_parallel_group = groups._get_expert_parallel_group(f"ep_size_{cfg.model.ep_world_size}")
+            ep_group = f"ep_size_{cfg.model.ep_world_size}"
+            # expert_parallel_world_size = groups._get_expert_parallel_world_size(ep_group)
+            expert_parallel_group = groups._get_expert_parallel_group(ep_group)
             # logger.warning("Rank {} is here".format(DISTRIBUTED_RANK))
-            
-            # get language-direction
+
+            # print(f'[DEBUG {DISTRIBUTED_RANK}]', ep_group, expert_parallel_world_size, expert_parallel_group)
+
             object_list = [None] * cfg.distributed_training.distributed_world_size
             torch.distributed.all_gather_object(
                 object_list,
                 total_predictions,
-                group=expert_parallel_group)
+                group=None)
+            assert all(x is not None for x in object_list) and len(object_list) == 8, f"{len(object_list)}"
+            # print(f'[DEBUG {DISTRIBUTED_RANK}, {len(object_list)}]', object_list[:2])
+
+            # for i, x in enumerate(object_list):
+            #     for j, y in enumerate(object_list[:i]):
+            #         assert x != y, f"{i} == {j} !!!"
 
             # Only score on rank 0
             if DISTRIBUTED_RANK == 0:
                 scorer_rank_0 = scoring.build_scorer(cfg.scoring, tgt_dict)
-                for target_str, detok_hypo_str in [item for predlist in object_list for item in predlist]:
+                total_predictions = sum(object_list, [])
+                for target_str, detok_hypo_str in total_predictions:
                     scorer_rank_0.add_string(target_str, detok_hypo_str)
 
                 # append print to file
@@ -509,13 +520,14 @@ def _main(cfg: FairseqConfig, output_file):
                 scorer = scorer_rank_0
         if DISTRIBUTED_RANK == 0 or not GATHER_RESULTS:
             print(
-                f"[Rank {DISTRIBUTED_RANK}, {num_sentences}]"
+                f"[Rank {DISTRIBUTED_RANK}, {len(total_predictions)}]"
                 +
                 " | Generate {} with beam={}: {}".format(
                     cfg.dataset.gen_subset, cfg.generation.beam, scorer.result_string()
                 ),
                 file=output_file,
             )
+        torch.distributed.barrier()
 
     return scorer
 

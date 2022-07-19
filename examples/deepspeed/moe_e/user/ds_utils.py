@@ -359,6 +359,7 @@ def _save_deepspeed_checkpoint(
         pass
     else:
         distributed.barrier()
+        return
 
     if not end_of_epoch and cfg.keep_interval_updates > 0:
         # remove old checkpoints; checkpoints are sorted in descending order
