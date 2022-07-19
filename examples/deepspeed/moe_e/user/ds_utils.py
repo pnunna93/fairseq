@@ -326,6 +326,7 @@ def _save_deepspeed_checkpoint(
                             tag='default',
                             save_latest=False)
 
+            distributed.barrier()
             if trainer.data_parallel_rank == 0:
                 for cp in checkpoints[1:]:
                     # PathManager.copy(checkpoints[0], cp, overwrite=True)
