@@ -316,6 +316,7 @@ def _save_deepspeed_checkpoint(
         os.path.join(save_dir, fn) for fn, cond in checkpoint_conds.items() if cond
     ]
     import shutil
+    from torch import distributed
     if len(checkpoints) > 0:
         # trainer._save_deepspeed_checkpoint(checkpoints[0], extra_state)
         try:
@@ -324,26 +325,39 @@ def _save_deepspeed_checkpoint(
                             main_ckpt,
                             tag='default',
                             save_latest=False)
-            for cp in checkpoints[1:]:
-                # PathManager.copy(checkpoints[0], cp, overwrite=True)
-                try:
-                    shutil.copytree(main_ckpt, cp, dirs_exist_ok=True)
-                except TypeError as exc:
-                    logger.error(f"Failed an overwriting copy to {cp}; will remove "
-                                 f"existing checkpoint directory first, which might leave it corrupted.",
-                                 exc_info=True)
-                    shutil.rmtree(cp, ignore_errors=True)
-                    shutil.copytree(main_ckpt, cp)
+
+            if trainer.data_parallel_rank == 0:
+                for cp in checkpoints[1:]:
+                    # PathManager.copy(checkpoints[0], cp, overwrite=True)
+                    try:
+                        shutil.copytree(main_ckpt, cp, dirs_exist_ok=True)
+                    except TypeError as exc:
+                        logger.error(f"Failed an overwriting copy to {cp}; will remove "
+                                    f"existing checkpoint directory first, which might leave it corrupted.",
+                                    exc_info=True)
+                        shutil.rmtree(cp, ignore_errors=True)
+                        shutil.copytree(main_ckpt, cp)
+
+            #? Wait until RANK==0 copies the checkpoint.
+            distributed.barrier()
         except:
             logger.critical(f"{checkpoints[0]}**; Failed copying to {cp}**")
             raise
 
         write_timer.stop()
         logger.info(
+            f"[Rank {trainer.data_parallel_rank}] "
             "Saved deepspeed MoE checkpoint {} (epoch {} @ {} updates, score {}) (writing took {} seconds)".format(
                 checkpoints[0], epoch, updates, val_loss, write_timer.sum
             )
         )
+
+    #? If not RANK==0, skip the rest of the function. This's safe if all methods...
+    #? used are and remain pure. Otherwise, RANK!=0 workers will have an inconsistent state.
+    if trainer.data_parallel_rank == 0:
+        pass
+    else:
+        distributed.barrier()
 
     if not end_of_epoch and cfg.keep_interval_updates > 0:
         # remove old checkpoints; checkpoints are sorted in descending order
@@ -383,6 +397,9 @@ def _save_deepspeed_checkpoint(
         for old_chk in checkpoints[cfg.keep_best_checkpoints:]:
             if os.path.lexists(old_chk):
                 shutil.rmtree(old_chk)
+
+    if trainer.data_parallel_rank == 0:
+        distributed.barrier()
 
 def save_deepspeed_state_(
         cfg: FairseqConfig,
