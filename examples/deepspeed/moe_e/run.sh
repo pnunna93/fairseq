@@ -148,7 +148,7 @@ if [[ $ARCH == *ds_moe* ]]; then
     RUN_NAME_default="moe_g${NUM_GPUS}_ep${EP_WORLD_SIZE}_ex${NUM_EXPERTS}_k1_${MOE_MODE//,/}"
 else
     Config=(
-        --task translation_deepspeed
+        --task translation
         --criterion label_smoothed_cross_entropy
             --label-smoothing 0.1
     )

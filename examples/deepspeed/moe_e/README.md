@@ -11,7 +11,7 @@ Consider working in a separate python virtual env (e.g. via `conda create --name
 # Install fairseq from this source
 pip install --editable ./
 python setup.py build_ext --inplace
-pip install deepspeed
+pip install 'deepspeed==0.6.*'
 pip install sacremoses
 # The fairseq commit used here is not the latest, and is incompatible with sacrebleu>=2.*
 pip install 'sacrebleu==1.5.*'
