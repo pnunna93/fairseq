@@ -60,13 +60,17 @@ class ObjectView(object):
     def __init__(self, d):
         self.__dict__ = d
 
+def _get_local_rank(cfg: FairseqConfig):
+    return cfg.distributed_training.device_id
+    # return cfg.distributed_training.distributed_rank % cfg.distributed_training.distributed_num_procs
+
 def init_deepspeed_env_(cfg: FairseqConfig):
     init_deepspeed_bool = cfg.model.deepspeed_moe and cfg.distributed_training.distributed_rank is not None
     if init_deepspeed_bool:
         import deepspeed
-        # os.environ['LOCAL_RANK'] = str(cfg.distributed_training.distributed_rank % cfg.distributed_training.distributed_num_procs)
-        os.environ['LOCAL_RANK'] = str(cfg.distributed_training.device_id)
-        os.environ['OMPI_COMM_WORLD_LOCAL_RANK'] = str(cfg.distributed_training.device_id)
+        rank = _get_local_rank(cfg)
+        os.environ['LOCAL_RANK'] = str(rank)
+        os.environ['OMPI_COMM_WORLD_LOCAL_RANK'] = str(rank)
 
 def prepare_deepspeed_config_dict(cfg: FairseqConfig):
     """
@@ -117,7 +121,7 @@ def _init_model_(
     ds_args = ObjectView({})
     ds_args.deepspeed = True
     ds_args.deepspeed_config = None
-    ds_args.local_rank = cfg.distributed_training.distributed_rank % cfg.distributed_training.distributed_num_procs
+    ds_args.local_rank = _get_local_rank(cfg)
     tmp_module, _optim, _, _lr_sched = deepspeed.initialize(
         args=ds_args,
         model=model,
@@ -140,7 +144,7 @@ def _load_deepspeed_checkpoint(
     Load a checkpoint and restore the training iterator.
 
     *passthrough_args* will be passed through to
-    ``trainer.get_train_iterator``.
+    ``ds_module.load_checkpoint``.
     """
 
     suffix = None
@@ -193,6 +197,12 @@ def _load_deepspeed_checkpoint(
         load_optimizer_states=False,
         load_lr_scheduler_states=False,
         load_module_only=True,
+        # **passthrough_args,
+        # tag=None,
+        # load_module_strict=True,
+        # load_optimizer_states=True,
+        # load_lr_scheduler_states=True,
+        # load_module_only=False
     )
 
     return _load_path, _client_states

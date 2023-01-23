@@ -71,7 +71,7 @@ class CombinedModelCriterionConfig(FairseqDataclass):
     # loss_weights: Dict[str, float] = field(
     loss_weights: str = field(
         default="",
-        metadata={"help": "weights for the loss terms"},
+        metadata={"help": "weights for the loss terms as a str of a json dict"},
     )
     # log_keys: List[str] = field(
     #     default_factory=list,

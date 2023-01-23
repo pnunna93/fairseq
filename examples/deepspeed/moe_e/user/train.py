@@ -177,6 +177,10 @@ def main(cfg: FairseqConfig) -> None:
             cfg=cfg,
             model=trainer.model.module.module,
             weights_path=None)
+        if cfg.model.ep_world_size > cfg.model.num_experts:
+            raise ValueError(
+                f"Expected cfg.model.ep_world_size <= cfg.model.num_experts but found: "
+                f"{cfg.model.ep_world_size} > {cfg.model.num_experts}")
 
     if cfg.common.tpu:
         import torch_xla.core.xla_model as xm
@@ -426,6 +430,7 @@ def validate_and_save(
         checkpoint_utils.save_checkpoint(
             cfg.checkpoint, trainer, epoch_itr, valid_losses[0]
         )
+        # assert cfg.model.deepspeed_moe
         if cfg.model.deepspeed_moe:
             from user.ds_utils import save_deepspeed_state_
             save_deepspeed_state_(
@@ -553,4 +558,12 @@ def cli_main(
 
 
 if __name__ == "__main__":
-    cli_main()
+    try: 
+        # __spec__ = None
+        cli_main()
+    except KeyboardInterrupt:
+        print('Keyboard Interrupted')
+        try:
+            sys.exit(0)
+        except SystemExit:
+            os._exit(0)

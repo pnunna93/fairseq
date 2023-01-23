@@ -31,9 +31,9 @@ preprocess() {
 
 # ARCH='transformer_vaswani_wmt_en_de_big'
 # ARCH='transformer_ds_moe_vaswani_wmt_en_de_big'
-# ARCH='transformer_ds_moe_tiny'
+ARCH='transformer_ds_moe_tiny'
 # ARCH='transformer_tiny'
-ARCH=${ARCH:?"Export ARCH env var to specify an architecture name, e.g. 'transformer_ds_moe_tiny'."}
+ARCH=${ARCH:?"Export ARCH env var to specify an architecture name; e.g. 'transformer_ds_moe_tiny'."}
 
 DONT_SAVE="${DONT_SAVE:+"--no-save"}"
 RUN_NAME="${RUN_NAME:-$RUN_NAME_default}"
