@@ -765,4 +765,3 @@ class TransformerDecoder_MOE(FairseqDecoder):
             state_dict[version_key] = torch.Tensor([1])
 
         return state_dict
-

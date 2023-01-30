@@ -143,10 +143,13 @@ def main(cfg: FairseqConfig) -> None:
     # print(cfg.model)
     # raise ValueError
     init_deepspeed_env_(cfg)
+    assert cfg.model.deepspeed_moe
+    assert cfg.common.model_parallel_size == 1
     if cfg.common.model_parallel_size == 1:
         if cfg.model.deepspeed_moe:
             from user.trainer import DeepspeedETrainer
             trainer = DeepspeedETrainer(cfg, task, model, criterion, quantizer)
+            # import pdb; pdb.set_trace()
         else:
             trainer = Trainer(cfg, task, model, criterion, quantizer)
     else:
@@ -556,14 +559,23 @@ def cli_main(
     # if cfg.common.use_plasma_view:
     #     server.server.kill()
 
+def _process_cleanup(sig=None, frame=None):
+    import multiprocessing as mp
+    for proc in mp.active_children():
+        proc.terminate()
+    for proc in mp.active_children():
+        proc.join()
+    sys.exit(0)
 
 if __name__ == "__main__":
-    try: 
+    import signal
+    try:
         # __spec__ = None
+        signal.signal(signal.SIGTERM, _process_cleanup)
         cli_main()
     except KeyboardInterrupt:
-        print('Keyboard Interrupted')
+        print('>>> Keyboard Interrupted', flush=True)
         try:
-            sys.exit(0)
+            _process_cleanup()
         except SystemExit:
             os._exit(0)

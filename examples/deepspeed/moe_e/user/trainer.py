@@ -332,6 +332,7 @@ class DeepspeedETrainer(Trainer):
 
         logging_output = None
         if not overflow or self.cfg.distributed_training.ddp_backend == "slow_mo":
+        # if not self.cfg.distributed_training.ddp_backend == "slow_mo":
             self.set_num_updates(self.get_num_updates() + 1)
 
             if self.cfg.ema.store_ema:

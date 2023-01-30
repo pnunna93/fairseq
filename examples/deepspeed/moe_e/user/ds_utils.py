@@ -153,7 +153,8 @@ def _load_deepspeed_checkpoint(
         checkpoint_path = os.path.join(
             os.path.dirname(checkpoint_path),
             "deepspeed_moe",
-            os.path.basename(checkpoint_path),
+            # os.path.basename(checkpoint_path),
+            cfg.restore_file,
         )
     elif (
         cfg.restore_file == "checkpoint_last.pt"
@@ -178,16 +179,24 @@ def _load_deepspeed_checkpoint(
                 raise ValueError(
                     f"--funetune-from-model {cfg.finetune_from_model} does not exist"
                 )
-    elif suffix is not None:
-        checkpoint_path = cfg.restore_file.replace(".pt", suffix + ".pt")
     else:
-        checkpoint_path = cfg.restore_file
+        if suffix is not None:
+            checkpoint_path = cfg.restore_file.replace(".pt", suffix + ".pt")
+        else:
+            checkpoint_path = cfg.restore_file
+        if not os.path.isdir(checkpoint_path):
+            checkpoint_path = os.path.join(
+                os.path.dirname(checkpoint_path),
+                "deepspeed_moe",
+                os.path.basename(checkpoint_path),
+            )
 
     if cfg.restore_file != "checkpoint_last.pt" and cfg.finetune_from_model:
         raise ValueError(
             "--finetune-from-model and --restore-file (non-default value) "
             "can not be specified together: " + str(cfg)
         )
+
 
     # logger.critical(f"{checkpoint_path}**")
     _load_path, _client_states = ds_module.load_checkpoint(
@@ -216,16 +225,22 @@ def load_deepspeed_state_(
 ):
     ds_module: deepspeed.DeepSpeedEngine = _init_model_(
         model, cfg, **(init_kwargs or {}))
+    #! Removed in fixing-Hai update
     if not weights_path:
-        weights_path = f"{cfg.checkpoint.save_dir}/checkpoint_last.pt"
+        # weights_path = f"{cfg.checkpoint.save_dir}/checkpoint_last.pt"
+        weights_path = f"{cfg.checkpoint.save_dir}/{cfg.checkpoint.restore_file or 'checkpoint_last.pt'}"
     if not os.path.lexists(weights_path):
         logger.warning(f"Couldn't find {weights_path}**; Skipping load...")
         return ds_module
-    _load_path, _client_states = _load_deepspeed_checkpoint(
-        cfg.checkpoint,
-        ds_module=ds_module,
-        checkpoint_path=weights_path,
-    )
+    try:
+        _load_path, _client_states = _load_deepspeed_checkpoint(
+            cfg.checkpoint,
+            ds_module=ds_module,
+            checkpoint_path=weights_path,
+        )
+    except:
+        logger.error(f"Failed loading from {weights_path} ;;")
+        raise
     if _load_path:
         logger.info(f"Loaded DeepSpeed weights from: ``{_load_path}''.")
     else:

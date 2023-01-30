@@ -379,7 +379,7 @@ class Translation_DS_Task(FairseqTask):
             )
 
             gen_args = json.loads(self.cfg.eval_bleu_args)
-            self.sequence_generator = self.build_generator(
+            self.sequence_generator = self.build_generator(  # TODO: turn off this ep_size for non-MoE DS models
                 [model], Namespace(**gen_args), ep_group=f"ep_size_{cfg.ep_world_size}"
             )
         return model
@@ -590,12 +590,13 @@ class Translation_DS_Task(FairseqTask):
                         smooth = {"smooth_method": "exp"}
                     else:
                         smooth = {"smooth": "exp"}
+                    # logger.warning(f'Rank={dist.get_rank()} ENTERING BLEU REDUCE DEBUG:  smooth={smooth} and meters={meters} keys={meters.keys()}')
                     bleu = comp_bleu(
                         correct=meters["_bleu_counts"].sum,
                         total=meters["_bleu_totals"].sum,
                         sys_len=int(meters["_bleu_sys_len"].sum),
                         ref_len=int(meters["_bleu_ref_len"].sum),
-                        **smooth
+                        **smooth,
                     )
                     return round(bleu.score, 2)
 
