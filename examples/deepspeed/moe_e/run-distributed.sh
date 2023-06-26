@@ -67,7 +67,7 @@ train() {
     SaveDir="${OUT_DIR?}/checkpoints/${ARCH}-${RUN_NAME}"
     mkdir -p $SaveDir
 
-    python -m torch.distributed.launch \
+    torchrun \
     --nproc_per_node=${NUM_GPUS} \
     --node_rank=${NODE_RANK:-0} \
     --nnodes=${NODE_COUNT:-1} \
