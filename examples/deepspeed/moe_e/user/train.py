@@ -178,7 +178,7 @@ def main(cfg: FairseqConfig) -> None:
         # ckpt_path = f"{cfg.checkpoint.save_dir}/deepspeed_moe"
         trainer.ds_module = load_deepspeed_state_(
             cfg=cfg,
-            model=trainer.model.module.module,
+            model=trainer.model,
             weights_path=None)
         if cfg.model.ep_world_size > cfg.model.num_experts:
             raise ValueError(
@@ -438,7 +438,7 @@ def validate_and_save(
             from user.ds_utils import save_deepspeed_state_
             save_deepspeed_state_(
                 cfg,
-                model=trainer.model.module.module,
+                model=trainer.model,
                 trainer=trainer,
                 ds_module=trainer.ds_module,
                 ckpt_tag=None,
