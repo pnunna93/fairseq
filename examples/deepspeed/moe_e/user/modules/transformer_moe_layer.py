@@ -49,6 +49,14 @@ DEFAULT_MAX_TARGET_POSITIONS = 1024
 
 DEFAULT_MIN_PARAMS_TO_WRAP = int(1e8)
 
+def get_device():
+    import deepspeed
+
+    def _get_version(_version):
+        return tuple(map(int, _version.split('.')))
+    if _get_version(deepspeed.__version__) >= _get_version("0.15.0"):
+        return "cuda"
+    return "cpu"
 
 class TransformerEncoderLayer_MOE(nn.Module):
     """Encoder layer block.
@@ -93,7 +101,8 @@ class TransformerEncoderLayer_MOE(nn.Module):
         self.experts = None
         if (index + 1) % 2 == 0:
             from deepspeed.moe.layer import MoE
-            self.expert_counts = torch.zeros(1, args.num_experts, dtype=torch.int64).to('cpu')
+            dev = get_device()
+            self.expert_counts = torch.zeros(1, args.num_experts, dtype=torch.int64).to(dev)
             self.fc1 = self.build_fc1(
                 self.embed_dim,
                 args.encoder_ffn_embed_dim,
@@ -340,7 +349,8 @@ class TransformerDecoderLayer_MOE(nn.Module):
         self.experts = None
         if (index + 1) % 2 == 0:
             from deepspeed.moe.layer import MoE
-            self.expert_counts = torch.zeros(1, args.num_experts, dtype=torch.int64).to('cpu')
+            dev = get_device()
+            self.expert_counts = torch.zeros(1, args.num_experts, dtype=torch.int64).to(dev)
             self.fc1 = self.build_fc1(
                 self.embed_dim,
                 args.encoder_ffn_embed_dim,
