@@ -214,7 +214,7 @@ def do_setup(package_data):
             "cffi",
             "cython",
             'dataclasses; python_version<"3.7"',
-            "hydra-core>=1.3.2",
+            "hydra-core==1.1.2",
             "omegaconf",
             'numpy<1.20.0; python_version<"3.7"',
             'numpy; python_version>="3.7"',
