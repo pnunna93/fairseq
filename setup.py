@@ -223,6 +223,7 @@ def do_setup(package_data):
             "torch",
             "tqdm",
             "bitarray",
+            "torchaudio>=0.8.0",
         ],
         dependency_links=dependency_links,
         packages=find_packages(
